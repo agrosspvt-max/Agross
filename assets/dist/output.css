@@ -5831,24 +5831,56 @@ Container Width Based on Device
   max-height: 200px;
 }
 
+.autocomplete1[hidden],
+.autocomplete[hidden] {
+  display: none;
+}
+
+.autocomplete1 {
+  overscroll-behavior: contain;
+}
+
 .autocomplete1-item {
+  display: flex;
+  align-items: center;
   padding: 5px;
   cursor: pointer;
   font-size: 13px;
+  color: inherit;
+  text-decoration: none;
 }
 
-.autocomplete1-item:hover {
+.autocomplete1-item:hover,
+.autocomplete1-item.is-active {
   background-color: #e8e8e8;
 }
 
 .autocomplete1-icon {
+  flex: none;
   width: 20px;
   height: 20px;
   margin-right: 8px;
   object-fit: contain;
-  display: inline-block;
-  position: relative;
-  bottom: 2px
+}
+
+.autocomplete1-tag,
+.autocomplete-tag {
+  flex: none;
+  margin-left: 6px;
+  font-size: 11px;
+  color: #6b6b6b;
+}
+
+.autocomplete1-status,
+.autocomplete-status {
+  padding: 8px;
+  font-size: 13px;
+  color: #6b6b6b;
+}
+
+.autocomplete1-status.is-error,
+.autocomplete-status.is-error {
+  color: red;
 }
 
 
@@ -5892,16 +5924,43 @@ Container Width Based on Device
   overflow-y: auto; /* Enable vertical scrolling */
 }
 
+.autocomplete {
+  overscroll-behavior: contain;
+}
+
+/* The suggestion list sits outside the old text-16px/font-medium/black anchor, so set those here. */
 .autocomplete-item {
+  display: flex;
+  align-items: center;
   padding: 15px;
   cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  color: #000;
+  text-decoration: none;
 }
+
+.autocomplete-item:hover,
+.autocomplete-item.is-active {
+  background-color: #e8e8e8;
+}
+
 .autocomplete-icon {
+  flex: none;
   width: 30px;
   height: 30px;
-  margin-right: 3px;
+  margin-right: 8px;
   object-fit: contain;
-  display: inline-block;
+}
+
+.autocomplete-status {
+  padding: 15px;
+}
+
+/* Keep the header search panel open while its input has focus (it otherwise needs hover). */
+li.searchml-12:focus-within > ul {
+  opacity: 1;
+  visibility: visible;
 }
 
 .preloader {

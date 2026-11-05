@@ -27,7 +27,7 @@ Corporate marketing and lead-generation site for **Agross** (an Agromaxx brand, 
 - `product_detail.html` — template-leftover; not linked from anywhere.
 - `chemical.json` (67), `nonchemical.json` (40), `allproducts.json` (96; unreferenced by any page).
 - `products/` — product packshots (`products/<Name>.png`) and a catalogue `.docx`.
-- `assets/` — `js/` (`main.js` UI behaviour; `search-in-mobile.js` hard-coded search index), `css/` (vendor CSS), `dist/output.css`, `img/`, site images.
+- `assets/` — `js/` (`main.js` UI behaviour; `product-search.js` header product search), `css/` (vendor CSS), `dist/output.css`, `img/`, site images.
 - `illustra/` — illustration images.
 - `contact.php`, `form-2.php`, `form-3.php`, `form-4.php` — mail handlers.
 - `ssl/`, `acme/`, `.well-known/`, `certificate.cer`, `agross.txt`, `csr.txt` — certificates/keys/CSRs (see Risks).
@@ -37,7 +37,7 @@ Corporate marketing and lead-generation site for **Agross** (an Agromaxx brand, 
 - No router. Plain files linked by `href`. **Header/footer/nav are duplicated in every page** (~18 files); a nav change must be made in each.
 - Catalogue: `chemicals.html` (~2,400 lines) / `nonchemical.html` hold static product cards linking to `product.html?productId=<id>` or `nonchemical-details.html?productId=<id>`. Category tabs (`.customer-service-tabs`, `data-tab`) are jQuery in `assets/js/main.js`. Handlebars is loaded in `chemicals.html` but unused.
 - Detail pages: inline script reads `productId` from the URL, `fetch`es the JSON, finds the record by `productId`, fills the DOM. `technical` is set via `innerHTML` (and `benefits` on the non-chemical page); other fields via `textContent`. Errors: "Product Not Found" / "Error retrieving product details".
-- Search: `assets/js/search-in-mobile.js` filters a hard-coded array (`id`, `name`, `icon`, `url`); desktop input `#search-input`, mobile `#search-input1`. Adding a product to JSON does **not** add it to search.
+- Search: `assets/js/product-search.js` (loaded on every page with the header search) builds one list from `chemical.json` and `nonchemical.json` on first use and drives both the desktop box (`#search-input` / `#autocomplete`) and the mobile box (`#search-input1` / `#autocomplete1`). Rows are real links (`<a href>`) to `product.html?productId=<id>` or `nonchemical-details.html?productId=<id>`; the first record per ID is used, as on the detail pages. Names are matched with spaces and hyphens equivalent; extra spellings live in the `ALIASES` map at the top of the file; names shared by both catalogues get a Chemical / Non-chemical tag; missing thumbnails fall back to `assets/agross-logo.png`. New products added to the JSON appear in search automatically. Styles for the suggestion lists are the `.autocomplete*` rules in `assets/dist/output.css`; the desktop panel stays open via `li.searchml-12:focus-within > ul` (the header item otherwise opens only on hover).
 - Styling: Tailwind utility classes with custom tokens (e.g. `text-optional-color`, `bg-primary-gradient-colorr`). `privacy.html`/`terms.html` use Bootstrap 4; `thankyou.html` uses Bootstrap 5.
 - No client state, no localStorage, no cookies set by site code.
 
@@ -65,8 +65,9 @@ Known data issues (as of 2026-11-02):
 - `type` values inconsistent (`nonchemical`, `non-chemical`, `BIOLOGICAL`, `ORGANIC`); category casing varies.
 - Fixed 2026-11-05 (not yet deployed): Rotomax `productId` is now lowercase `rotomax` in `nonchemical.json`; Fasal Vriddhi Kit image-link typo in `nonchemical.html`; Fire search entries now point to `nonchemical-details.html`. All 392 listing/search links resolve locally.
 - `veera` has two records in `nonchemical.json` (second one unreachable).
-- Two separate search indexes exist: `assets/js/main.js` (desktop) and `assets/js/search-in-mobile.js` (mobile); keep them in sync.
-- Products absent from search: `maxx bit`, `mex quin`, `venue`, `parrot`, `fasal vriddhi kit`, `maxx grow`, `fire`, `tattoo`, `pretej1`, `ninja`, `maxx zyme`, `Rotomax`.
+- Search (branch `feature/shared-product-search`, not yet deployed): the two hard-coded search lists were replaced by `assets/js/product-search.js`; every product in both JSON files is searchable.
+- Catalogue names still differ in places from the spellings visitors know (e.g. `MAXX-CURE`, `POTAX-DM`, `CAMASA`); search shows the catalogue name and keeps old spellings as aliases.
+- `products/Mex Quin.png` is missing; search shows the fallback logo for it.
 
 ## 7. Key workflows
 1. Browse: listing page → card → `product.html?productId=x` → fetch JSON → render.
