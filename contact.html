@@ -281,12 +281,7 @@
                             alt="workflow">
                     </div>
                     <h3 class="font-bold text-18px md:text-20px lg:text-24px mb-10 lg:mb-15 text-white">Mail Us</h3>
-                    <a href="https://templates.envytheme.com/cdn-cgi/l/email-protection#f69e939a9a99b68299918fd895999b"
-                        class="block text-white mb-8 text-13px md:text-15px lg:text-16px"><span class="__cf_email__"
-                            data-cfemail="254d4049494a65514a425c0b464a48">info@agromaxx.in</span></a>
-                    <!-- <a href="https://templates.envytheme.com/cdn-cgi/l/email-protection#8fe6e1e9e0cffbe0e8f6a1ece0e2"
-                        class="block text-white text-13px md:text-15px lg:text-16px"><span class="__cf_email__"
-                            data-cfemail="92fbfcf4fdd2e6fdf5ebbcf1fdff">[email&#160;protected]</span></a> -->
+                    <a href="mailto:info@agromaxx.in" class="block text-white mb-8 text-13px md:text-15px lg:text-16px">info@agromaxx.in</a>
                 </div>
                 <div class="group md:text-left pb-20 md:pb-30 lg:pb-40 pr-20 md:pr-30 lg:pr-40 pl-20 md:pl-30 lg:pl-40 xl:pl-[160px] bg-primary-gradient-color relative rounded-md wow animate__animated animate__fadeInUp"
                     data-wow-delay=".5s">
@@ -312,16 +307,20 @@
                     <h2
                         class="font-black text-22px md:text-30px lg:text-35px xl:text-38px mb-25 lg:mb-35 text-black-color">
                         Contact Us </h2>
-                    <form action="https://client.digitalcube.tech/agross/contact.php" method="post">
+                    <form action="/api/enquiry" method="post" data-enquiry-form>
+                        <input type="hidden" name="formType" value="contact">
+                        <div hidden aria-hidden="true">
+                            <label>Leave this field blank<input type="text" name="fax" tabindex="-1" autocomplete="off"></label>
+                        </div>
                         <div
                             class="grid gap-20 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2">
                             <input type="text" placeholder="Your Name" name="name" autocomplete="off" required
                                 class="block w-full text-black-color bg-[#F5F0E8] h-50 lg:h-60 leading-[50px] lg:leading-[60px] rounded-sm pl-15 pr-15 placeholder:text-optional-color outline-0 placeholder:ease-in placeholder:duration-300 focus:placeholder:text-transparent text-13px md:text-15px lg:text-16px">
                             <input type="email" placeholder="Your Email" name="email" autocomplete="off" required
                                 class="block w-full text-black-color bg-[#F5F0E8] h-50 lg:h-60 leading-[50px] lg:leading-[60px] rounded-sm pl-15 pr-15 placeholder:text-optional-color outline-0 placeholder:ease-in placeholder:duration-300 focus:placeholder:text-transparent text-13px md:text-15px lg:text-16px">
-                            <input type="text" placeholder="Website" name="website" autocomplete="off" required
+                            <input type="text" placeholder="Website (optional)" name="website" autocomplete="off"
                                 class="block w-full text-black-color bg-[#F5F0E8] h-50 lg:h-60 leading-[50px] lg:leading-[60px] rounded-sm pl-15 pr-15 placeholder:text-optional-color outline-0 placeholder:ease-in placeholder:duration-300 focus:placeholder:text-transparent text-13px md:text-15px lg:text-16px">
-                            <input type="tel" placeholder="Phone No" name="phone" autocomplete="off" required
+                            <input type="tel" placeholder="Phone number (optional)" name="phone" autocomplete="off"
                                 class="block w-full text-black-color bg-[#F5F0E8] h-50 lg:h-60 leading-[50px] lg:leading-[60px] rounded-sm pl-15 pr-15 placeholder:text-optional-color outline-0 placeholder:ease-in placeholder:duration-300 focus:placeholder:text-transparent text-13px md:text-15px lg:text-16px">
                         </div>
                         <textarea cols="30" rows="5" name="message" autocomplete="off" required
@@ -330,7 +329,9 @@
                         <button type="submit" name="send"
                             class="inline-block font-semibold text-13px md:text-14px lg:text-15px mt-15 md:mt-25 rounded-sm text-white pt-17 pb-13 pl-35 pr-35 bg-gradient-color shadow-custom-box-shadow hover:shadow-primary-btn ease-in duration-300">Send
                             Message</button>
+                        <p data-form-status role="status" aria-live="polite" class="mt-15 text-13px md:text-15px text-optional-color" hidden></p>
                     </form>
+                        <p class="mt-10 text-optional-color">See our <a href="privacy.html" class="underline">Privacy Policy</a> for how we handle your enquiry.</p>
                 </div>
                 <div class="xl:pl-15">
                     <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3666.829257367886!2d77.4523204736435!3d23.212892279040833!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x397c432bdaf53605%3A0x8abb56bdc7bdb96e!2sAgromaxx%20Industry!5e0!3m2!1sen!2sin!4v1689662186529!5m2!1sen!2sin" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
@@ -409,10 +410,7 @@
                             class="mb-15 md:mb-15 lg:mb-20 text-optional-color last:mb-0 relative text-13px md:text-15px lg:text-16px pl-25">
                             <img src="assets/img/icon/email.svg" class="absolute top-0 md:top-2 left-0" alt="icon">
                             <span class="font-medium text-black-color">Mail Us:</span>
-                            <a class="text-optional-color transition hover:text-secondary-color">
-                                <span">
-                                    info@agromaxx.in</span>
-                            </a>
+                            <a href="mailto:info@agromaxx.in" class="text-optional-color transition hover:text-secondary-color">info@agromaxx.in</a>
                         </li>
                     </ul>
                 </div>
@@ -544,14 +542,6 @@
                                         class="absolute left-0 right-0 top-1/2 m-auto -translate-y-2/4" alt="youtube">
                                 </a>
                             </li>
-                            <li class="inline-block mr-5 last:mr-0">
-                                <a href="http://krishify.com/" target="_blank" style="background-color: lightgreen;"
-                                    class="block w-35 rounded-full transition relative h-35 text-center hover:opacity-90">
-                                    <img src="assets/social-media-image.png" style="width: 50px;"
-                                        class="w-15 absolute left-0 right-0 top-1/2 m-auto -translate-y-2/4"
-                                        alt="krishify">
-                                </a>
-                            </li>
                         </ul>
 
 
@@ -571,15 +561,8 @@
                 <div
                     class="grid gap-5 md:gap-25 grid-cols-1 sm:grid-cols-1 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2">
                     <div class="copyright">
-                        <p class="text-13px md:text-15px lg:text-16px text-white">All right reserved &copy;2026 <span 
+                        <p class="text-13px md:text-15px lg:text-16px text-white">All rights reserved &copy;2026 <span
                                 class="font-semibold text-white">Agromaxx</span>
-                            <a href="https://envytheme.com/" class="font-semibold bg-primary-gradient-color"
-                                target="_blank"></a>
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-13px md:text-15px lg:text-16px text-white">Design & developed by  
-                          <a href="http://digitalcube.tech/" class="font-semibold text-white" target="_blank">Digitalcube.tech</a>
                         </p>
                     </div>
                         <div class="copyright-info self-center">
@@ -631,6 +614,7 @@
     <script src="assets/js/wow.min.js"></script>
     <script src="assets/js/main.js"></script>
     <script src="assets/js/product-search.js"></script>
+    <script src="assets/js/forms.js" defer></script>
 </body>
 
 

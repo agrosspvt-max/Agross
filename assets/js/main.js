@@ -265,8 +265,7 @@ var Puducherry = ["Karaikal","Mahe","Puducherry","Yanam"];
 
 $("#inputState").change(function(){
   var StateSelected = $(this).val();
-  var optionsList;
-  var htmlString = "";
+  var optionsList = [];
 
   switch (StateSelected) {
     case "Andra Pradesh":
@@ -327,7 +326,7 @@ $("#inputState").change(function(){
         optionsList = Nagaland;
         break;
     case  "Orissa":
-        optionsList = Orissa;
+        optionsList = Odisha;
         break;
     case "Punjab":
         optionsList = Punjab;
@@ -348,7 +347,7 @@ $("#inputState").change(function(){
         optionsList = Tripura ;
         break;
     case  "Uttaranchal":
-        optionsList = Uttaranchal;
+        optionsList = Uttarakhand;
         break;
     case  "Uttar Pradesh":
         optionsList = UttarPradesh;
@@ -372,18 +371,19 @@ $("#inputState").change(function(){
         optionsList = Delhi;
         break;
     case "Lakshadeep":
-        optionsList = Lakshadeep ;
+        optionsList = Lakshadweep;
         break;
     case  "Pondicherry":
-        optionsList = Pondicherry;
+        optionsList = Puducherry;
         break;
 }
 
 
-  for(var i = 0; i < optionsList.length; i++){
-    htmlString = htmlString+"<option value='"+ optionsList[i] +"'>"+ optionsList[i] +"</option>";
-  }
-  $("#inputDistrict").html(htmlString);
+  var district = $("#inputDistrict").empty();
+  district.append($("<option>", { value: "", text: "Select district", selected: true, disabled: true }));
+  optionsList.forEach(function (name) {
+    district.append(new Option(name, name));
+  });
 
 });
 

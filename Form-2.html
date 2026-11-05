@@ -313,7 +313,11 @@
                     <!-- <h2
                         class="font-black text-22px md:text-30px lg:text-35px xl:text-38px mb-25 lg:mb-35 text-black-color">
                         Contact Us</h2> -->
-                    <form action="https://client.digitalcube.tech/agross/form-2.php" method="post">
+                    <form action="/api/enquiry" method="post" data-enquiry-form>
+                        <input type="hidden" name="formType" value="dealership">
+                        <div hidden aria-hidden="true">
+                            <label>Leave this field blank<input type="text" name="fax" tabindex="-1" autocomplete="off"></label>
+                        </div>
                         <div
                             class="grid gap-20 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2">
                             <input type="text" placeholder="Your Name" name="name" autocomplete="off" required
@@ -326,8 +330,7 @@
                                 <select name="state" autocomplete="off" required
                                     class="form-control block appearance-none w-full text-black-color bg-[#F5F0E8] h-50 lg:h-60 leading-[50px] lg:leading-[60px] rounded-sm pl-15 pr-15 placeholder:text-optional-color outline-0 placeholder:ease-in placeholder:duration-300 focus:placeholder:text-transparent text-13px md:text-15px lg:text-16px"
                                     id="inputState">
-                                    <option for="inputState">State</option>
-                                    <option value="SelectState">Select State</option>
+                                    <option value="" selected disabled>Select State</option>
                                     <option value="Andra Pradesh">Andra Pradesh</option>
                                     <option value="Arunachal Pradesh">Arunachal Pradesh</option>
                                     <option value="Assam">Assam</option>
@@ -379,8 +382,7 @@
                                 <select name="district" autocomplete="off" required
                                     class="form-control block appearance-none w-full text-black-color bg-[#F5F0E8] h-50 lg:h-60 leading-[50px] lg:leading-[60px] rounded-sm pl-15 pr-15 placeholder:text-optional-color outline-0 placeholder:ease-in placeholder:duration-300 focus:placeholder:text-transparent text-13px md:text-15px lg:text-16px"
                                     id="inputDistrict">
-                                    <option for="inputDistrict">District</option>
-                                    <option value="">Select district</option>
+                                    <option value="" selected disabled>Select district</option>
                                 </select>
                                 <div
                                     class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
@@ -434,7 +436,9 @@
                         <button type="submit" name="send"
                             class="inline-block font-semibold text-13px md:text-14px lg:text-15px mt-15 md:mt-25 rounded-sm text-white pt-17 pb-13 pl-35 pr-35 bg-gradient-color shadow-custom-box-shadow hover:shadow-primary-btn ease-in duration-300">Send
                             Message</button>
+                        <p data-form-status role="status" aria-live="polite" class="mt-15 text-13px md:text-15px text-optional-color" hidden></p>
                     </form>
+                        <p class="mt-10 text-optional-color">See our <a href="privacy.html" class="underline">Privacy Policy</a> for how we handle your enquiry.</p>
                 </div>
                 <div class="xl:pl-15 pt-150">
                     <img src="assets\img\83318-online-work 3.png"
@@ -512,10 +516,7 @@
                             class="mb-15 md:mb-15 lg:mb-20 text-optional-color last:mb-0 relative text-13px md:text-15px lg:text-16px pl-25">
                             <img src="assets/img/icon/email.svg" class="absolute top-0 md:top-2 left-0" alt="icon">
                             <span class="font-medium text-black-color">Mail Us:</span>
-                            <a class="text-optional-color transition hover:text-secondary-color">
-                                <span">
-                                    info@agromaxx.in</span>
-                            </a>
+                            <a href="mailto:info@agromaxx.in" class="text-optional-color transition hover:text-secondary-color">info@agromaxx.in</a>
                         </li>
                     </ul>
                 </div>
@@ -647,14 +648,6 @@
                                         class="absolute left-0 right-0 top-1/2 m-auto -translate-y-2/4" alt="youtube">
                                 </a>
                             </li>
-                            <li class="inline-block mr-5 last:mr-0">
-                                <a href="http://krishify.com/" target="_blank" style="background-color: lightgreen;"
-                                    class="block w-35 rounded-full transition relative h-35 text-center hover:opacity-90">
-                                    <img src="assets/social-media-image.png" style="width: 50px;"
-                                        class="w-15 absolute left-0 right-0 top-1/2 m-auto -translate-y-2/4"
-                                        alt="krishify">
-                                </a>
-                            </li>
                         </ul>
 
 
@@ -674,15 +667,8 @@
                 <div
                     class="grid gap-5 md:gap-25 grid-cols-1 sm:grid-cols-1 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2">
                     <div class="copyright">
-                        <p class="text-13px md:text-15px lg:text-16px text-white">All right reserved &copy;2026 <span 
+                        <p class="text-13px md:text-15px lg:text-16px text-white">All rights reserved &copy;2026 <span
                                 class="font-semibold text-white">Agromaxx</span>
-                            <a href="https://envytheme.com/" class="font-semibold bg-primary-gradient-color"
-                                target="_blank"></a>
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-13px md:text-15px lg:text-16px text-white">Design and developed by  
-                          <a href="http://digitalcube.tech/" class="font-semibold text-white" target="_blank">Digitalcube.tech</a>
                         </p>
                     </div>
                         <div class="copyright-info self-center">
@@ -735,6 +721,7 @@
     <script src="assets/js/wow.min.js"></script>
     <script src="assets/js/main.js"></script>
     <script src="assets/js/product-search.js"></script>
+    <script src="assets/js/forms.js" defer></script>
 </body>
 
 

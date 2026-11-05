@@ -7,3 +7,6 @@
 /.well-known/
 **/*.key
 **/*.pem
+/public/
+/node_modules/
+/.vercel/
