@@ -63,7 +63,10 @@ Known data issues (as of 2026-11-02):
 - `allproducts.json` disagrees with the category files on 11 IDs (e.g. `rotomaxx` vs `Rotomax`).
 - Missing images: `products/Mex Quin.png`, `Rotomaxx.png`, `Maxx Prom-.png`, `Potax Dm.png`, `Red Bull.png`.
 - `type` values inconsistent (`nonchemical`, `non-chemical`, `BIOLOGICAL`, `ORGANIC`); category casing varies.
-- Search index: broken link `rotomaxx` → `rotomax`; products absent from search: `maxx bit`, `mex quin`, `venue`, `parrot`, `fasal vriddhi kit`, `maxx grow`, `fire`, `tattoo`, `pretej1`, `ninja`, `maxx zyme`, `Rotomax`.
+- Fixed 2026-11-05 (not yet deployed): Rotomax `productId` is now lowercase `rotomax` in `nonchemical.json`; Fasal Vriddhi Kit image-link typo in `nonchemical.html`; Fire search entries now point to `nonchemical-details.html`. All 392 listing/search links resolve locally.
+- `veera` has two records in `nonchemical.json` (second one unreachable).
+- Two separate search indexes exist: `assets/js/main.js` (desktop) and `assets/js/search-in-mobile.js` (mobile); keep them in sync.
+- Products absent from search: `maxx bit`, `mex quin`, `venue`, `parrot`, `fasal vriddhi kit`, `maxx grow`, `fire`, `tattoo`, `pretej1`, `ninja`, `maxx zyme`, `Rotomax`.
 
 ## 7. Key workflows
 1. Browse: listing page → card → `product.html?productId=x` → fetch JSON → render.
