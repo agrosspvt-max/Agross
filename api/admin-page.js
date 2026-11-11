@@ -15,6 +15,9 @@ function viewFor(pathname) {
     if (clean === 'admin') return { file: 'overview.html', permission: 'enquiries' };
     if (clean === 'admin/enquiries') return { file: 'inbox.html', permission: 'enquiries' };
     if (new RegExp('^admin/enquiries/' + UUID + '$', 'i').test(clean)) return { file: 'enquiry.html', permission: 'enquiries' };
+    if (clean === 'admin/products') return { file: 'products.html', permission: 'products_edit' };
+    if (clean === 'admin/recruiting') return { file: 'recruiting.html', permission: 'recruitment' };
+    if (clean === 'admin/products/new' || new RegExp('^admin/products/' + UUID + '$', 'i').test(clean)) return { file: 'product-edit.html', permission: 'products_edit' };
     if (clean === 'admin/login') return { file: 'login.html', public: true };
     if (clean === 'admin/password') return { file: 'password.html', passwordPage: true };
     return null;
@@ -61,6 +64,10 @@ module.exports = async function adminPage(req, res) {
         } else {
             if (!session) return redirect(res, '/admin/login?next=' + encodeURIComponent(pathname));
             if (session.user.mustChangePassword && !view.passwordPage) return redirect(res, '/admin/password');
+            if (view.file === 'overview.html' && !hasPermission(session.user, 'enquiries')) {
+                if (hasPermission(session.user, 'products_edit')) return redirect(res, '/admin/products');
+                if (hasPermission(session.user, 'recruitment')) return redirect(res, '/admin/recruiting');
+            }
             if (view.permission && !hasPermission(session.user, view.permission)) {
                 return send(res, 403, 'You do not have access to this page.', 'text/plain; charset=utf-8');
             }

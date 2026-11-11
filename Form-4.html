@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="assets/css/meanmenu.min.css">
     <link rel="stylesheet" href="assets/css/animate.min.css">
     <link rel="stylesheet" href="assets/dist/output.css">
+    <link rel="stylesheet" href="assets/css/careers.css">
 
     <title>Agross</title>
     <link rel="icon" type="image/png" href="assets/agross-logo.png">
@@ -244,7 +245,7 @@
             <div class="banner-content text-center ml-auto mr-auto max-w-[1010px]">
                 <h1
                     class="font-black text-black-color text-25px md:text-40px lg:text-51px xl:text-65px mb-12 md:mb-15 lg:mb-20">
-                    Welcome <span style="color: #015141;">Home</span>
+                    Welcome <span style="color: #015141;"></span>
                 </h1>
 
                 <p
@@ -285,8 +286,11 @@
                 <div class="xl:pr-15">
                     <h2
                         class="font-black text-22px md:text-30px lg:text-35px xl:text-38px mb-25 lg:mb-35 text-black-color">
-                        BE AN ENABLER OF SUSTAINABILITY</h2>
-                    <form action="/api/enquiry" method="post" data-enquiry-form>
+                        Apply to join Agross</h2>
+                    <p class="careers-application-status" data-careers-application-status role="status"></p>
+                    <noscript><p class="careers-application-status">Enable JavaScript to submit an application.</p></noscript>
+                    <form action="/api/enquiry" method="post" data-enquiry-form data-careers-application hidden>
+                        <p class="careers-application-role" data-careers-role hidden></p>
                         <input type="hidden" name="formType" value="recruitment">
                         <div hidden aria-hidden="true">
                             <label>Leave this field blank<input type="text" name="fax" tabindex="-1" autocomplete="off"></label>
@@ -299,10 +303,10 @@
                                 class="block w-full text-black-color bg-[#F5F0E8] h-50 lg:h-60 leading-[50px] lg:leading-[60px] rounded-sm pl-15 pr-15 placeholder:text-optional-color outline-0 placeholder:ease-in placeholder:duration-300 focus:placeholder:text-transparent text-13px md:text-15px lg:text-16px">
                             <input type="email" placeholder="Your Mail" name="email" autocomplete="off" required
                                 class="block w-full text-black-color bg-[#F5F0E8] h-50 lg:h-60 leading-[50px] lg:leading-[60px] rounded-sm pl-15 pr-15 placeholder:text-optional-color outline-0 placeholder:ease-in placeholder:duration-300 focus:placeholder:text-transparent text-13px md:text-15px lg:text-16px">
-                            <div class="relative">
-                                <select name="profile" autocomplete="off" required
+                            <div class="relative" data-careers-profile>
+                                <select name="profile" aria-label="Profile" autocomplete="off" required
                                     class="block appearance-none w-full text-black-color bg-[#F5F0E8] h-50 lg:h-60 leading-[50px] lg:leading-[60px] rounded-sm pl-15 pr-15 placeholder:text-optional-color outline-0 placeholder:ease-in placeholder:duration-300 focus:placeholder:text-transparent text-13px md:text-15px lg:text-16px">
-                                    <option value="" selected disabled>Select Profile</option>
+                                    <option selected>General application</option>
                                     <option>Field Assistant</option>
                                     <option>Marketing Development Officer</option>
                                     <option>Sales Trainer</option>
@@ -384,9 +388,14 @@
                         <textarea cols="30" rows="5" name="address" autocomplete="off" required
                             class="mt-20 block w-full text-black-color bg-[#F5F0E8] rounded-sm p-15 placeholder:text-optional-color outline-0 placeholder:ease-in placeholder:duration-300 focus:placeholder:text-transparent text-13px md:text-15px lg:text-16px"
                             placeholder="Your Address"></textarea>
+                        <div class="mt-20">
+                            <label for="recruitment-resume" class="block font-semibold">Resume (optional)</label>
+                            <p id="recruitment-resume-help" class="text-optional-color">PDF only, up to 2 MB.</p>
+                            <input id="recruitment-resume" name="resume" type="file" accept=".pdf,application/pdf"
+                                aria-describedby="recruitment-resume-help" class="mt-10 block w-full">
+                        </div>
                         <button type="submit" name="send"
-                            class="inline-block font-semibold text-13px md:text-14px lg:text-15px mt-15 md:mt-25 rounded-sm text-white pt-17 pb-13 pl-35 pr-35 bg-gradient-color shadow-custom-box-shadow hover:shadow-primary-btn ease-in duration-300">Send
-                            Message</button>
+                            class="inline-block font-semibold text-13px md:text-14px lg:text-15px mt-15 md:mt-25 rounded-sm text-white pt-17 pb-13 pl-35 pr-35 bg-gradient-color shadow-custom-box-shadow hover:shadow-primary-btn ease-in duration-300">Submit application</button>
                         <p data-form-status role="status" aria-live="polite" class="mt-15 text-13px md:text-15px text-optional-color" hidden></p>
                     </form>
                         <p class="mt-10 text-optional-color">See our <a href="privacy.html" class="underline">Privacy Policy</a> for how we handle your enquiry.</p>
@@ -679,6 +688,7 @@
     <script src="assets/js/wow.min.js"></script>
     <script src="assets/js/main.js"></script>
     <script src="assets/js/product-search.js"></script>
+    <script src="assets/js/careers.js" defer></script>
     <script src="assets/js/forms.js" defer></script>
 </body>
 

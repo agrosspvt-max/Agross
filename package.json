@@ -7,14 +7,15 @@
   },
   "scripts": {
     "build": "node scripts/build.js",
-    "test": "node --env-file-if-exists=.env.local --test test/*.test.js",
+    "test": "node --env-file-if-exists=.env.local --test --test-concurrency=1 test/*.test.js",
     "dev": "node --env-file-if-exists=.env.local scripts/dev-server.js",
     "db:start": "scripts/local-db.sh start",
     "db:stop": "scripts/local-db.sh stop",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.js",
     "db:seed": "node --env-file-if-exists=.env.local scripts/seed-sample.js",
     "admin:create-owner": "node --env-file-if-exists=.env.local scripts/admin-create-owner.js",
-    "admin:reset-password": "node --env-file-if-exists=.env.local scripts/admin-reset-password.js"
+    "admin:reset-password": "node --env-file-if-exists=.env.local scripts/admin-reset-password.js",
+    "catalogue:import": "node --env-file-if-exists=.env.local scripts/import-catalogue.js"
   },
   "dependencies": {
     "pg": "^8.23.1"

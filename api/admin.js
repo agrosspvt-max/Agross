@@ -6,6 +6,8 @@
 const auth = require('../lib/auth');
 const inbox = require('../lib/inbox');
 const notify = require('../lib/notify');
+const adminProducts = require('../lib/admin-products');
+const recruiting = require('../lib/recruiting');
 
 const { authenticate, sendError } = auth;
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -104,6 +106,22 @@ async function route(req, res, name) {
         return found ? res.status(200).json(found) : sendError(res, 404, 'Enquiry not found.');
     }
 
+    if (name === 'enquiry-resume') {
+        if (method !== 'GET') return methodNotAllowed(res, 'GET');
+        const session = await authenticate(req, res, { permission: 'enquiries' });
+        if (!session) return null;
+        const id = first(params.id);
+        const resume = UUID.test(String(id)) ? await inbox.getResume(id, session.user) : null;
+        if (!resume) return sendError(res, 404, 'Resume not found.');
+        const view = first(params.view) === '1';
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', (view ? 'inline' : 'attachment') + '; filename="' + resume.filename + '"');
+        // Chromium's PDF viewer needs a top-level document without a CSP sandbox.
+        res.setHeader('Content-Security-Policy', view ? "frame-ancestors 'none'" : "default-src 'none'; sandbox");
+        res.setHeader('Referrer-Policy', 'no-referrer');
+        return res.status(200).send(resume.data);
+    }
+
     if (name === 'enquiry-status') {
         if (method !== 'POST') return methodNotAllowed(res, 'POST');
         const session = await authenticate(req, res, { permission: 'enquiries' });
@@ -133,6 +151,22 @@ async function route(req, res, name) {
         const result = await notify.deliver(body.id, { acceptUnconfirmed: body.confirm === true });
         await auth.audit(session.user.id, 'notification_retry', 'enquiry', body.id, { result: result.state });
         return res.status(200).json({ state: result.state });
+    }
+
+    if (name === 'recruiting') {
+        if (method !== 'GET' && method !== 'POST') return methodNotAllowed(res, 'GET, POST');
+        const session = await authenticate(req, res, { permission: 'recruitment' });
+        if (!session) return null;
+        if (method === 'GET') return res.status(200).json({ openings: await recruiting.adminOpenings() });
+        const checked = recruiting.validateOpening(jsonBody(req));
+        if (checked.error) return sendError(res, 400, checked.error);
+        const opening = await recruiting.saveOpening(checked.opening, session.user.id);
+        if (!opening) return sendError(res, 404, 'Opening not found.');
+        return res.status(checked.opening.id ? 200 : 201).json({ opening });
+    }
+
+    if (name.startsWith('product') || name === 'catalogue-live') {
+        if (await adminProducts.handle(name, req, res, { params, first, jsonBody })) return null;
     }
 
     return sendError(res, 404, 'Not found.');

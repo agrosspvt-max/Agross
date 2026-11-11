@@ -5,6 +5,7 @@
 
 <head>
     <meta charset="UTF-8">
+    <script>if (/[?&]embed=1/.test(location.search)) { document.documentElement.classList.add('is-preview'); }</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <!-- All CSS Links -->
@@ -93,8 +94,56 @@
             }
         }
 
+        /* Product photo: a fixed stage; assets/js/product-image.js scales the visible pack to fit it. */
+        .product-stage {
+            position: relative;
+            width: 100%;
+            height: clamp(300px, 46vw, 460px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         #product-image {
-            float: left;
+            float: none;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .fit-js #product-image {
+            position: absolute;
+            max-width: none;
+            max-height: none;
+            opacity: 0;
+        }
+
+        .fit-js #product-image[data-fit="ready"] {
+            opacity: 1;
+            transition: opacity 0.15s;
+        }
+
+        @media (max-width: 600px) {
+            .about-area .image {
+                padding: 24px !important;
+            }
+        }
+
+        /* Embedded in the admin editor: show only the product part of the page. */
+        .is-preview .navbar-area,
+        .is-preview footer,
+        .is-preview .support-area,
+        .is-preview .copyright-area,
+        .is-preview .preloader-area,
+        .is-preview .float {
+            display: none !important;
+        }
+
+        .is-preview .wow,
+        .is-preview .animate_animated {
+            visibility: visible !important;
+            animation: none !important;
+            opacity: 1 !important;
         }
 
         /* tr:hover {
@@ -361,14 +410,20 @@
             <div class="grid gap-25 grid-cols-1 md:grid-cols-1 lg:grid-cols-2">
                 <div class="image lg:pl-100 wow animate_animated animate_fadeInUp" data-wow-delay=".1s"
                     style="background-color: #FBFBFB; display: flex; justify-content: center; align-items: center; padding: 60px; border-radius: 5px;">
-                    <img id="product-image" src="illustra/newreverseimage.svg" alt="about-image"
-                        style="max-width: 100%; max-height: 100%;">
+                    <div class="product-stage" id="product-stage">
+                        <img id="product-image" src="illustra/newreverseimage.svg" alt="about-image">
+                    </div>
                 </div>
                 <div class="self-center lg:pr-80">
                     <div class="mt-0 lg:mt-10">
                         <h3 class="font-bold text-15px md:text-17px lg:text-18px mb-15 lg:mb-25">Product Information
                         </h3>
                         <ul>
+                            <span class="text-black-color font-semibold" id="description-heading"
+                                style="display: none;">Description:</span>
+                            <li id="product-description"
+                                class="text-13px md:text-15px lg:text-16px text-optional-color mb-15 lg:mb-18 last:mb-0"
+                                style="display: none;"></li>
                             <span class="text-black-color font-semibold">Technical:</span>
                             <li id="product-technical"
                                 class="text-13px md:text-15px lg:text-16px text-optional-color mb-15 lg:mb-18 last:mb-0">
@@ -442,16 +497,37 @@
         // Get the productId from the query parameter
         const productId = getQueryParam('productId');
 
-        // Retrieve the product details from the JSON file
-        fetch('chemical.json')
-            .then(response => response.json())
-            .then(products => {
-                // Find the product with the specified productId
-                const product = products.find(p => p.productId === productId);
+        // Retrieve the product from the published catalogue (falls back to chemical.json)
+        const previewId = getQueryParam('preview');
+        document.addEventListener('DOMContentLoaded', function () {
+        window.AgrossCatalogue.loadProduct('chemical', productId, previewId)
+            .then(result => {
+                const product = result.state === 'ok' ? result.product : null;
+
+                if (result.state === 'unavailable') {
+                    document.getElementById('product-name').textContent = 'This product is no longer available';
+                    const back = document.createElement('a');
+                    back.href = 'chemicals.html';
+                    back.textContent = 'Browse all chemical products';
+                    const category = document.getElementById('product-category');
+                    category.textContent = '';
+                    category.appendChild(back);
+                    return;
+                }
+                if (result.state === 'preview-denied') {
+                    document.getElementById('product-name').textContent = 'Sign in to the admin area to preview this product';
+                    return;
+                }
 
                 if (product) {
                     // Render the product details
-                    document.getElementById('product-image').src = product.image;
+                    document.getElementById('product-image').src = product.image || 'assets/agross-logo.png';
+                    document.getElementById('product-image').alt = product.imageAlt || product.name;
+                    if (product.description) {
+                        document.getElementById('description-heading').style.display = 'block';
+                        document.getElementById('product-description').textContent = product.description;
+                        document.getElementById('product-description').style.display = 'block';
+                    }
                     document.getElementById('product-name').textContent = product.name;
                     document.getElementById('product-category').textContent = product.category;
                     document.getElementById('product-technical').innerHTML = product.technical;
@@ -496,6 +572,10 @@
                         document.getElementById('product-targetweeds').textContent = product.targetweeds;
                         document.getElementById('product-targetweeds').style.display = 'block';
                     }
+                    if (previewId && getQueryParam('embed') === '1' && window.parent !== window) {
+                        document.documentElement.dataset.productPreview = previewId;
+                        window.parent.postMessage('agross-product-preview-ready', window.location.origin);
+                    }
                 }
                 else {
                     // Product not found
@@ -506,6 +586,7 @@
                 console.error(error);
                 document.getElementById('product-name').textContent = 'Error retrieving product details';
             });
+        });
     </script>
 
     <!-- Support Area -->
@@ -787,6 +868,7 @@
     <script src="assets/js/wow.min.js"></script>
     <script src="assets/js/main.js"></script>
     <script src="assets/js/product-search.js"></script>
+    <script src="assets/js/product-image.js"></script>
 </body>
 
 <!--  -->

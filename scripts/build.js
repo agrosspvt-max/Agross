@@ -10,6 +10,8 @@ fs.mkdirSync(output, { recursive: true });
 
 // Only publish website assets. PHP, credentials, tests and server code stay private.
 for (const name of fs.readdirSync(root)) {
+    // The two listing pages are answered by api/listing.js (which reads the originals as its template).
+    if (['chemicals.html', 'nonchemical.html'].includes(name)) continue;
     if (name.endsWith('.html') || ['chemical.json', 'nonchemical.json', 'allproducts.json'].includes(name)) {
         fs.copyFileSync(path.join(root, name), path.join(output, name));
     }

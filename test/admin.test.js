@@ -10,6 +10,7 @@ const inbox = require('../lib/inbox');
 const admin = require('../api/admin');
 const adminPage = require('../api/admin-page');
 const enquiryHandler = require('../api/enquiry');
+const openingsHandler = require('../api/openings');
 
 let available = false;
 before(async () => { available = await databaseAvailable(); });
@@ -287,8 +288,15 @@ test('someone without enquiry access gets nothing from the pages or the API', as
         const res = await call(admin, { method, route, query, body: { id, status: 'resolved' }, cookie, csrf });
         assert.equal(res.statusCode, 403, route);
     }
-    assert.equal((await call(adminPage, { query: { p: '' }, cookie })).statusCode, 403);
+    // A product editor lands on the product list; the enquiry pages stay closed to them.
+    const landing = await call(adminPage, { query: { p: '' }, cookie });
+    assert.equal(landing.statusCode, 302);
+    assert.equal(landing.headers.location, '/admin/products');
     assert.equal((await call(adminPage, { query: { p: 'enquiries' }, cookie })).statusCode, 403);
+    // Someone with neither permission gets nothing at all.
+    await createUser({ username: 'nobody', permissions: ['accounts'] });
+    const nobody = await signIn('nobody');
+    assert.equal((await call(adminPage, { query: { p: '' }, cookie: nobody.cookie })).statusCode, 403);
 });
 
 test('recruitment records are hidden from everyone without recruitment access, everywhere', async t => {
@@ -316,6 +324,160 @@ test('recruitment records are hidden from everyone without recruitment access, e
     const hr = await signIn('hr');
     assert.equal((await call(admin, { route: 'enquiries', cookie: hr.cookie })).body.total, 2);
     assert.equal((await call(admin, { route: 'enquiry', query: { id: hiddenId }, cookie: hr.cookie })).statusCode, 200);
+});
+
+test('Recruiting requires permission and only open positions appear on Join Us', async t => {
+    if (!available) return t.skip('no test database');
+    const route = { route: 'recruiting' };
+    const page = { query: { p: 'recruiting' } };
+    const body = { designation: 'Field Assistant', area: ' Bhopal, Madhya Pradesh ', description: 'Support the field team.', isOpen: false };
+    assert.equal((await call(adminPage, page)).statusCode, 302);
+    assert.equal((await call(admin, route)).statusCode, 401);
+    await createUser({ username: 'staff', permissions: ['enquiries', 'products_edit'] });
+    const staff = await signIn('staff');
+    assert.equal((await call(adminPage, { ...page, cookie: staff.cookie })).statusCode, 403);
+    assert.equal((await call(admin, { ...route, ...staff })).statusCode, 403);
+    assert.equal((await call(admin, { ...route, ...staff, method: 'POST', body })).statusCode, 403);
+
+    await createUser({ username: 'hr', permissions: ['recruitment'] });
+    const hr = await signIn('hr');
+    assert.equal((await call(adminPage, { ...page, cookie: hr.cookie })).statusCode, 200);
+    const save = values => call(admin, { ...route, ...hr, method: 'POST', body: values });
+    assert.equal((await call(admin, { ...route, cookie: hr.cookie, method: 'POST', body })).statusCode, 403);
+    assert.equal((await save({ ...body, description: ' ' })).statusCode, 400);
+    assert.equal((await save({ ...body, area: 'North\nSouth' })).statusCode, 400);
+    const draft = await save(body);
+    assert.equal(draft.statusCode, 201);
+    const { id } = draft.body.opening;
+    assert.equal(draft.body.opening.area, body.area.trim());
+    assert.deepEqual((await call(openingsHandler)).body, { openings: [] });
+    assert.equal((await call(openingsHandler, { query: { id } })).statusCode, 404);
+    assert.equal((await save({ ...body, id, isOpen: true })).statusCode, 200);
+    const listed = await call(openingsHandler);
+    assert.deepEqual(listed.body, { openings: [{ id, designation: body.designation, area: body.area.trim(), description: body.description }] });
+    assert.equal(listed.headers['cache-control'], 'no-store');
+    const edited = { ...body, id, area: 'Indore', description: 'Travel to field sites.\nTraining provided.', isOpen: true };
+    assert.equal((await save(edited)).statusCode, 200);
+    const detail = (await call(openingsHandler, { query: { id } })).body.opening;
+    assert.equal(detail.description, edited.description);
+    assert.equal(detail.area, edited.area);
+    assert.equal((await save({ ...edited, area: '', isOpen: false })).body.opening.area, null);
+    assert.deepEqual((await call(openingsHandler)).body, { openings: [] });
+    assert.equal((await call(openingsHandler, { query: { id } })).statusCode, 404);
+    assert.equal((await call(admin, { ...route, ...hr })).body.openings[0].isOpen, false);
+});
+
+test('role applications store the opening and send its designation with the resume', async t => {
+    if (!available) return t.skip('no test database');
+    await createUser();
+    const owner = await signIn();
+    const save = body => call(admin, { route: 'recruiting', ...owner, method: 'POST', body });
+    const posting = { designation: 'Field Assistant', description: 'Support the field team.', isOpen: true };
+    const { id, area } = (await save(posting)).body.opening;
+    assert.equal(area, null, 'area is optional for existing and new openings');
+    const sent = [];
+    t.mock.method(global, 'fetch', async (_url, options) => {
+        sent.push(JSON.parse(options.body));
+        return { ok: true, json: async () => ({ messageId: '<role-test@brevo.test>' }) };
+    });
+    const content = Buffer.from('%PDF-1.7\n%%EOF\n').toString('base64');
+    const apply = body => call(enquiryHandler, {
+        method: 'POST', body: { formType: 'recruitment', ...recruit(1), profile: 'Client-supplied profile', openingId: id,
+            submissionKey: 'application-0123456789', resume: { name: 'Applicant.pdf', content }, ...body }
+    });
+    assert.equal((await apply({ openingId: 'invalid' })).statusCode, 400);
+    assert.equal((await apply({ formType: 'contact' })).statusCode, 400);
+    assert.equal((await apply()).statusCode, 303);
+    const { rows: [enquiry] } = await db.query('SELECT id, job_opening_id FROM enquiries');
+    assert.equal(enquiry.job_opening_id, id);
+    const detail = await call(admin, { route: 'enquiry', query: { id: enquiry.id }, ...owner });
+    assert.equal(detail.body.fields.find(field => field.key === 'profile').value, posting.designation);
+    assert.equal(detail.body.resumeFilename, 'Applicant.pdf');
+    assert.equal(sent.length, 1);
+    assert.match(JSON.stringify(sent[0]), /Field Assistant/);
+    assert.deepEqual(sent[0].attachment, [{ name: 'Applicant.pdf', content }]);
+
+    await save({ ...posting, id, designation: 'Renamed role', isOpen: false });
+    assert.equal((await apply({ submissionKey: 'new-application-0123456789' })).statusCode, 409);
+    assert.equal((await apply()).statusCode, 303, 'a retry still confirms the previously saved application');
+    assert.equal(sent.length, 1);
+    const historical = await call(admin, { route: 'enquiry', query: { id: enquiry.id }, ...owner });
+    assert.equal(historical.body.fields.find(field => field.key === 'profile').value, posting.designation);
+});
+
+test('recruitment resume stays private, survives a failed send, and is attached on retry', async t => {
+    if (!available) return t.skip('no test database');
+    const data = Buffer.from('%PDF-1.7\n%%EOF\n');
+    const content = data.toString('base64');
+    const emails = [];
+    const fetch = mock.method(global, 'fetch', async (url, options) => {
+        emails.push(JSON.parse(options.body));
+        return emails.length === 1
+            ? { ok: false, status: 500 }
+            : { ok: true, json: async () => ({ messageId: '<resume-retry@brevo.test>' }) };
+    });
+    t.after(() => fetch.mock.restore());
+    const submission = {
+        method: 'POST', body: { formType: 'recruitment', submissionKey: 'resume-key-0123456789',
+            ...recruit(1), resume: { name: 'My resume.PDF', content } }
+    };
+    assert.equal((await call(enquiryHandler, submission)).statusCode, 303);
+    assert.equal((await call(enquiryHandler, submission)).statusCode, 303);
+    assert.equal(emails.length, 1);
+    const { rows: [row] } = await db.query('SELECT enquiry_id FROM enquiry_resumes');
+
+    await createUser({ username: 'staff', permissions: ['enquiries'] });
+    const staff = await signIn('staff');
+    const route = { route: 'enquiry-resume', query: { id: row.enquiry_id } };
+    assert.equal((await call(admin, route)).statusCode, 401);
+    assert.equal((await call(admin, { ...route, cookie: staff.cookie })).statusCode, 404);
+    const staffInbox = await call(admin, { route: 'enquiries', cookie: staff.cookie });
+    assert.equal(staffInbox.body.showAttachments, false);
+    assert.equal(staffInbox.body.items.length, 0);
+
+    await createUser({ username: 'hr', permissions: ['enquiries', 'recruitment'] });
+    const { cookie, csrf } = await signIn('hr');
+    await addEnquiry('recruitment', 'without-resume-0123456789', recruit(2));
+    await addEnquiry('contact', 'resume-list-contact-0123456789', contact(3));
+    for (const query of [{}, { form: 'recruitment' }]) {
+        const list = await call(admin, { route: 'enquiries', query, cookie });
+        assert.equal(list.body.showAttachments, true);
+        assert.equal(list.body.items.length, query.form ? 2 : 3);
+        assert.deepEqual(list.body.items.filter(item => item.hasResume).map(item => item.id), [row.enquiry_id]);
+    }
+    for (const form of ['contact', 'dealership', 'farming']) {
+        const list = await call(admin, { route: 'enquiries', query: { form }, cookie });
+        assert.equal(list.body.showAttachments, false);
+        assert.ok(list.body.items.every(item => !item.hasResume));
+    }
+
+    const enquiry = await call(admin, { route: 'enquiry', query: { id: row.enquiry_id }, cookie });
+    assert.equal(enquiry.body.notification.state, 'failed');
+    assert.equal(enquiry.body.resumeFilename, 'My-resume.pdf');
+    assert.ok(!JSON.stringify(enquiry.body).includes(content));
+
+    const download = await call(admin, { ...route, cookie });
+    assert.equal(download.statusCode, 200);
+    assert.equal(download.headers['content-type'], 'application/pdf');
+    assert.equal(download.headers['content-disposition'], 'attachment; filename="My-resume.pdf"');
+    assert.equal(download.headers['cache-control'], 'no-store');
+    assert.deepEqual(download.body, data);
+
+    const preview = { ...route, query: { ...route.query, view: '1' } };
+    assert.equal((await call(admin, preview)).statusCode, 401);
+    assert.equal((await call(admin, { ...preview, cookie: staff.cookie })).statusCode, 404);
+    const viewed = await call(admin, { ...preview, cookie });
+    assert.equal(viewed.statusCode, 200);
+    assert.equal(viewed.headers['content-type'], 'application/pdf');
+    assert.equal(viewed.headers['content-disposition'], 'inline; filename="My-resume.pdf"');
+    assert.equal(viewed.headers['cache-control'], 'no-store');
+    assert.deepEqual(viewed.body, data);
+
+    const retry = await call(admin, { method: 'POST', route: 'enquiry-retry', body: { id: row.enquiry_id }, cookie, csrf });
+    assert.equal(retry.body.state, 'accepted');
+    assert.equal(emails.length, 2);
+    for (const email of emails) assert.deepEqual(email.attachment, [{ name: 'My-resume.pdf', content }]);
+    assert.equal((await db.query('SELECT count(*)::int AS count FROM enquiry_resumes')).rows[0].count, 1);
 });
 
 test('overview tiles equal the inbox counts they open, using India Standard Time days', async t => {

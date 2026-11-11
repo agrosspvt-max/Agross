@@ -127,6 +127,26 @@ test('invalid email, duplicate values, select placeholders and long fields are r
     assert.equal(calls.save.length, 0);
 });
 
+test('only recruitment accepts a PDF resume, with a 2 MB limit', async () => {
+    const { calls, handler } = setup();
+    const pdf = Buffer.from('%PDF-1.7\n%%EOF\n').toString('base64');
+    for (const [type, resume, status] of [
+        ['contact', { name: 'resume.pdf', content: pdf }, 400],
+        ['recruitment', { name: 'resume.docx', content: pdf }, 400],
+        ['recruitment', { name: 'resume.pdf', content: Buffer.from('plain text').toString('base64') }, 400],
+        ['recruitment', { name: 'resume.pdf', content: Buffer.alloc(2 * 1024 * 1024 + 1).toString('base64') }, 413]
+    ]) {
+        const req = request(type);
+        req.headers['content-type'] = 'application/json';
+        req.body.resume = resume;
+        const res = response();
+        await handler(req, res);
+        assert.equal(res.statusCode, status);
+    }
+    assert.equal(calls.save.length, 0);
+    assert.equal(calls.deliver.length, 0);
+});
+
 test('unknown or inherited form types and malformed bodies are rejected', async () => {
     const { calls, handler } = setup();
     for (const body of [undefined, null, [], 'name=visitor', {}, { formType: '__proto__' }, { formType: 'toString' }, { formType: ['contact'] }]) {
@@ -214,7 +234,7 @@ test('the four HTML forms use the matching handler contract and no agency endpoi
     const pages = { 'contact.html': 'contact', 'Form-2.html': 'dealership', 'Form-3.html': 'farming', 'Form-4.html': 'recruitment' };
     for (const [page, type] of Object.entries(pages)) {
         const html = fs.readFileSync(page, 'utf8');
-        assert.match(html, /<form action="\/api\/enquiry" method="post" data-enquiry-form>/);
+        assert.match(html, /<form action="\/api\/enquiry" method="post" data-enquiry-form(?=[\s>])/);
         assert.ok(html.includes('name="formType" value="' + type + '"'));
         assert.ok(!html.includes('client.digitalcube.tech'));
         assert.ok(html.includes('assets/js/forms.js'));

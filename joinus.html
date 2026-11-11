@@ -13,7 +13,9 @@
     <link rel="stylesheet" href="assets/css/animate.min.css">
     <link rel="stylesheet" href="assets/dist/output.css">
 
-    <title>Agross</title>
+    <link rel="stylesheet" href="assets/css/careers.css">
+    <title>Careers at Agross | Current Openings</title>
+    <meta name="description" content="Explore current job openings at Agross and apply to join our team.">
     <link rel="icon" type="image/png" href="assets/agross-logo.png">
 
     <!-- Google Fonts -->
@@ -248,345 +250,39 @@
         </div>
     </div>
     <!-- End Navbar for Responsive -->
-    <script>
-        function scrollToElement(selector, duration) {
-            const targetElement = document.querySelector(selector);
-
-            if (targetElement) {
-                const targetOffset = targetElement.offsetTop;
-
-                window.scrollTo({
-                    top: targetOffset,
-                    behavior: 'smooth',
-                    duration: duration
-                });
-            }
-        }
-    </script>
-    <!-- Main Banner Area -->
-    <!-- <div class="relative z-1 pt-60 md:pt-80 lg:pt-100 pb-60 md:pb-80 lg:pb-100">
-        <div class="container">
-            <div class="text-center xl:ml-auto xl:mr-auto xl:max-w-[1115px]">
-                <h1 class="font-black text-black-color text-25px md:text-40px lg:text-51px xl:text-65px mb-12 md:mb-15 lg:mb-20">
-                   Join Us
-                </h1>
-                <p class="text-optional-color text-14px md:text-15px lg:text-16px mb-15 lg:ml-auto lg:mr-auto lg:max-w-[790px] md:leading-8 leading-7">
-                    We are committed to help farmers transition to sustainable practices with zero sacrifice transition, reduce the use of harmful chemicals and pesticides, make agricultural environmentally sustainable and economically. 
-
-                </p>
-                <a href="#allpositions"
-                    class="inline-block mt-0 md:mt-5 lg:mt-10 font-semibold text-13px md:text-14px lg:text-15px rounded-sm text-white pt-17 pb-15 pl-35 pr-35 bg-primary-gradient-colorr shadow-custom-box-shadow slide-transition"
-                    onclick="scrollToElement('#allpositions', 1000)">
-                    Explore More
-                </a>
+    <main>
+        <section class="careers-hero" aria-labelledby="careers-heading">
+            <div class="container">
+                <p class="careers-kicker">Careers at Agross</p>
+                <h1 id="careers-heading">Join us at Agross</h1>
+                <p class="careers-intro">Help farmers adopt more sustainable practices. Explore current openings and find your place on our team.</p>
             </div>
-        </div>
-        <div class="absolute -z-1 right-[2%] top-[30%] 3xl:right-[10%] hidden xl:inline"><img src="illustra\12.png"
-                class="animate-custom-moveleftbounce" alt="shape"></div>
-        <div class="absolute -z-1 left-[4%] top-[14%] 3xl:left-[10%] hidden lg:inline"><img src="illustra\12.png"
-                class="animate-custom-movebounce" alt="shape"></div>
-        <div class="absolute -z-1 right-[64%] bottom-[22%] 3xl:right-[29%] hidden lg:inline"><img
-                src="illustra\arrowpng.png" class="" alt="shape"></div>
-        <div class="absolute -z-1 right-[25%] bottom-[13%] 3xl:right-[29%] hidden lg:inline"><img
-                src="assets/img/icon/tick.svg" class="animate-custom-movebounce" alt="shape"></div>
-    </div> -->
-    <!-- End Main Banner Area -->
-    <!-- Banner Area -->
-    <div id="allpositions"
-        class="banner-area pt-60 md:pt-80 lg:pt-100 relative z-1 before:absolute before:left-0 before:right-0 before:bottom-0 before:bg-[#fbfbfb] before:h-[180px] md:before:h-[300px] before:-z-1">
-        <div class="container">
-            <div class="banner-content joinus-title ml-auto mr-auto max-w-[1010px]">
-                <h1
-                    class="font-black text-black-color text-25px md:text-40px lg:text-51px xl:text-50px mb-12 md:mb-15 lg:mb-20">
-                    BE AN ENABLER OF<span style="color: #015141;"> SUSTAINABILITY</span>
-                </h1>
-
-                <p
-                    class="text-optional-color text-14px md:text-15px lg:text-16px mb-15 lg:ml-auto lg:mr-auto lg:max-w-[790px] md:leading-8 leading-7">
-                    We are committed to help farmers transition to sustainable practices with zero sacrifice transition,
-                    reduce the use of harmful chemicals and pesticides, make agricultural environmentally sustainable
-                    and economically.
-                </p>
+        </section>
+        <section class="careers-positions" id="allpositions" aria-labelledby="openings-heading">
+            <div class="container">
+                <header class="careers-list-heading">
+                    <p class="careers-kicker">Work with us</p>
+                    <h2 id="openings-heading">Current openings</h2>
+                    <p data-careers-list-hint hidden>Choose a role to read the full description and apply.</p>
+                </header>
+                <p class="careers-status" data-careers-status role="status" hidden></p>
+                <div class="careers-status careers-empty" data-careers-empty hidden>
+                    <p>There are no open positions right now. You’re welcome to send us your resume for future opportunities.</p>
+                    <a class="careers-apply" href="/Form-4.html">Send your resume</a>
+                </div>
+                <div class="careers-jobs" data-careers-list></div>
+                <noscript><p class="careers-status">Enable JavaScript to see current openings.</p></noscript>
             </div>
-        </div>
-        <div class="absolute -z-1 hidden xl:inline left-0 top-[14%]"><img src="assets/img/shape/shape16.png"
-                alt="shape"></div>
-        <div class="absolute -z-1 hidden lg:inline left-[5%] bottom-[27%]"><img src="assets/img/shape/shape17.png"
-                class="animate-custom-rotateme" alt="shape"></div>
-        <div class="absolute -z-1 hidden lg:inline right-[0] top-[14%]"><img src="assets/img/shape/shape18.png"
-                alt="shape"></div>
-    </div>
-    <!-- End Banner Area -->
-    <!-- <div class="features-area pt-60 md:pt-80 lg:pt-100 pb-60 md:pb-80 lg:pb-100 bg-[#fbfbfb]">
-        <div class="container">
-            <div class="section-title mb-35 md:mb-40 lg:mb-50 text-center">
+        </section>
+        <section class="container careers-culture" aria-labelledby="culture-heading">
+            <div>
+                <p class="careers-kicker">Our team</p>
+                <h2 id="culture-heading">Practical work for sustainable farming</h2>
+                <p>We value people who take initiative, pay attention to detail, and work together to solve real problems for farmers.</p>
             </div>
-            <div class="grid gap-25 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
-                <div class="single-features-box border p-[20px] sm:border-0 sm:p-0 text-center sm:text-left wow animate__animated animate__fadeInUp"
-                    data-wow-delay=".1s">
-                    <div
-                        class="icon w-60 h-60 md:w-75 md:h-75 lg:w-100 lg:h-90 rounded-full  text-center relative mb-20 md:mb-25 ml-auto mr-auto sm:ml-0 sm:mr-0">
-                        <img src="illustra\logo.png" class="absolute left-0 right-0 top-1/2 m-auto -translate-y-2/4"
-                            alt="shield-tick">
-                    </div>
-                    <h3 class="font-bold text-18px md:text-20px lg:text-24px mb-10 lg:mb-12">
-                        <a class="inline-block text-black-color hover:text-primary-color ease-in duration-300">
-                            Field <br>Advisor
-                        </a>
-                    </h3>
-                    <p
-                        class="leading-7 md:leading-8 text-optional-color mb-10 md:mb-15 text-13px md:text-15px lg:text-16px">
-                        Madhya Pradesh</p>
-                    <a href="https://goo.gl/maps/qVhCTQVAzPpDZtpt9" target="_blank" 
-                        class="link-btn inline-block relative pr-20 font-medium text-13px md:text-14px lg:text-15px text-secondary-color ease-in duration-100 hover:text-secondary-color hover:tracking-wide">
-                        Check Location <img src="assets/img/icon/secondary-arrow-right.svg"
-                            class="absolute right-0 top-1 md:top-3" alt="arrow-right">
-                    </a>
-                    <a href="Form-4.html"
-                        class="inline-block font-semibold text-13px md:text-14px lg:text-15px mt-15 md:mt-25 rounded-sm text-white pt-17 pb-13 pl-35 pr-35 bg-gradient-color shadow-custom-box-shadow hover:shadow-primary-btn ease-in duration-300">Send
-                        Message</a>
-
-                </div>
-                <div class="single-features-box border p-[20px] sm:border-0 sm:p-0 text-center sm:text-left wow animate__animated animate__fadeInUp"
-                    data-wow-delay=".3s">
-                    <div
-                        class="icon w-60 h-60 md:w-75 md:h-75 lg:w-100 lg:h-90 rounded-full  text-center relative mb-20 md:mb-25 ml-auto mr-auto sm:ml-0 sm:mr-0">
-                        <img src="illustra\logo.png" class="absolute left-0 right-0 top-1/2 m-auto -translate-y-2/4"
-                            alt="shield-tick">
-                    </div>
-                    <h3 class="font-bold text-18px md:text-20px lg:text-24px mb-10 lg:mb-12">
-                        <a class="inline-block text-black-color hover:text-primary-color ease-in duration-300">
-                            Sales <br>Trainee
-                        </a>
-                    </h3>
-                    <p
-                        class="leading-7 md:leading-8 text-optional-color mb-10 md:mb-15 text-13px md:text-15px lg:text-16px">
-                        Madhya Pradesh</p>
-                    <a href="https://goo.gl/maps/qVhCTQVAzPpDZtpt9" target="_blank"
-                        class="link-btn inline-block relative pr-20 font-medium text-13px md:text-14px lg:text-15px text-secondary-color ease-in duration-100 hover:text-secondary-color hover:tracking-wide">
-                        Check Location <img src="assets/img/icon/secondary-arrow-right.svg"
-                            class="absolute right-0 top-1 md:top-3" alt="arrow-right">
-                    </a>
-                    <a href="Form-4.html"
-                        class="inline-block font-semibold text-13px md:text-14px lg:text-15px mt-15 md:mt-25 rounded-sm text-white pt-17 pb-13 pl-35 pr-35 bg-gradient-color shadow-custom-box-shadow hover:shadow-primary-btn ease-in duration-300">Send
-                        Message</a>
-
-                </div>
-                <div class="single-features-box border p-[20px] sm:border-0 sm:p-0 text-center sm:text-left wow animate__animated animate__fadeInUp"
-                    data-wow-delay=".5s">
-                    <div
-                        class="icon w-60 h-60 md:w-75 md:h-75 lg:w-100 lg:h-90 rounded-full  text-center relative mb-20 md:mb-25 ml-auto mr-auto sm:ml-0 sm:mr-0">
-                        <img src="illustra\logo.png" class="absolute left-0 right-0 top-1/2 m-auto -translate-y-2/4"
-                            alt="shield-tick">
-                    </div>
-                    <h3 class="font-bold text-18px md:text-20px lg:text-24px mb-10 lg:mb-12">
-                        <a class="inline-block text-black-color hover:text-primary-color ease-in duration-300">
-                            Sales <br>Officer
-                        </a>
-                    </h3>
-                    <p
-                        class="leading-7 md:leading-8 text-optional-color mb-10 md:mb-15 text-13px md:text-15px lg:text-16px">
-                        Madhya Pradesh</p>
-                    <a href="https://goo.gl/maps/qVhCTQVAzPpDZtpt9" target="_blank"
-                        class="link-btn inline-block relative pr-20 font-medium text-13px md:text-14px lg:text-15px text-secondary-color ease-in duration-100 hover:text-secondary-color hover:tracking-wide">
-                        Check Location <img src="assets/img/icon/secondary-arrow-right.svg"
-                            class="absolute right-0 top-1 md:top-3" alt="arrow-right">
-                    </a>
-                    <a href="Form-4.html"
-                        class="inline-block font-semibold text-13px md:text-14px lg:text-15px mt-15 md:mt-25 rounded-sm text-white pt-17 pb-13 pl-35 pr-35 bg-gradient-color shadow-custom-box-shadow hover:shadow-primary-btn ease-in duration-300">Send
-                        Message</a>
-
-                </div>
-                <div class="single-features-box border p-[20px] sm:border-0 sm:p-0 text-center sm:text-left wow animate__animated animate__fadeInUp"
-                    data-wow-delay=".7s">
-                    <div
-                        class="icon w-60 h-60 md:w-75 md:h-75 lg:w-100 lg:h-90 rounded-full  text-center relative mb-20 md:mb-25 ml-auto mr-auto sm:ml-0 sm:mr-0">
-                        <img src="illustra\logo.png" class="absolute left-0 right-0 top-1/2 m-auto -translate-y-2/4"
-                            alt="shield-tick">
-                    </div>
-                    <h3 class="font-bold text-18px md:text-20px lg:text-24px mb-10 lg:mb-12">
-                        <a class="inline-block text-black-color hover:text-primary-color ease-in duration-300">
-                            Senior Sales <br>Officer
-                        </a>
-                    </h3>
-                    <p
-                        class="leading-7 md:leading-8 text-optional-color mb-10 md:mb-15 text-13px md:text-15px lg:text-16px">
-                        Madhya Pradesh</p>
-                    <a href="https://goo.gl/maps/qVhCTQVAzPpDZtpt9" target="_blank"
-                        class="link-btn inline-block relative pr-20 font-medium text-13px md:text-14px lg:text-15px text-secondary-color ease-in duration-100 hover:text-secondary-color hover:tracking-wide">
-                        Check Location <img src="assets/img/icon/secondary-arrow-right.svg"
-                            class="absolute right-0 top-1 md:top-3" alt="arrow-right">
-                    </a>
-                    <a href="Form-4.html"
-                        class="inline-block font-semibold text-13px md:text-14px lg:text-15px mt-15 md:mt-25 rounded-sm text-white pt-17 pb-13 pl-35 pr-35 bg-gradient-color shadow-custom-box-shadow hover:shadow-primary-btn ease-in duration-300">Send
-                        Message</a>
-                </div>
-                <div class="single-features-box border p-[20px] sm:border-0 sm:p-0 text-center sm:text-left wow animate__animated animate__fadeInUp"
-                    data-wow-delay=".7s">
-                    <div
-                        class="icon w-60 h-60 md:w-75 md:h-75 lg:w-100 lg:h-90 rounded-full  text-center relative mb-20 md:mb-25 ml-auto mr-auto sm:ml-0 sm:mr-0">
-                        <img src="illustra\logo.png" class="absolute left-0 right-0 top-1/2 m-auto -translate-y-2/4"
-                            alt="shield-tick">
-                    </div>
-                    <h3 class="font-bold text-18px md:text-20px lg:text-24px mb-10 lg:mb-12">
-                        <a class="inline-block text-black-color hover:text-primary-color ease-in duration-300">
-                            Area Sales Manager
-                        </a>
-                    </h3>
-                    <p
-                        class="leading-7 md:leading-8 text-optional-color mb-10 md:mb-15 text-13px md:text-15px lg:text-16px">
-                        Madhya Pradesh</p>
-                    <a href="https://goo.gl/maps/qVhCTQVAzPpDZtpt9" target="_blank"
-                        class="link-btn inline-block relative pr-20 font-medium text-13px md:text-14px lg:text-15px text-secondary-color ease-in duration-100 hover:text-secondary-color hover:tracking-wide">
-                        Check Location <img src="assets/img/icon/secondary-arrow-right.svg"
-                            class="absolute right-0 top-1 md:top-3" alt="arrow-right">
-                    </a>
-                    <a href="Form-4.html"
-                        class="inline-block font-semibold text-13px md:text-14px lg:text-15px mt-15 md:mt-25 rounded-sm text-white pt-17 pb-13 pl-35 pr-35 bg-gradient-color shadow-custom-box-shadow hover:shadow-primary-btn ease-in duration-300">Send
-                        Message</a>
-                </div>
-                <div class="single-features-box border p-[20px] sm:border-0 sm:p-0 text-center sm:text-left wow animate__animated animate__fadeInUp"
-                    data-wow-delay=".7s">
-                    <div
-                        class="icon w-60 h-60 md:w-75 md:h-75 lg:w-100 lg:h-90 rounded-full  text-center relative mb-20 md:mb-25 ml-auto mr-auto sm:ml-0 sm:mr-0">
-                        <img src="illustra\logo.png" class="absolute left-0 right-0 top-1/2 m-auto -translate-y-2/4"
-                            alt="shield-tick">
-                    </div>
-                    <h3 class="font-bold text-18px md:text-20px lg:text-24px mb-10 lg:mb-12">
-                        <a class="inline-block text-black-color hover:text-primary-color ease-in duration-300">
-                            Intern <br>Tech
-                        </a>
-                    </h3>
-                    <p
-                        class="leading-7 md:leading-8 text-optional-color mb-10 md:mb-15 text-13px md:text-15px lg:text-16px">
-                        Madhya Pradesh</p>
-                    <a href="https://goo.gl/maps/qVhCTQVAzPpDZtpt9" target="_blank"
-                        class="link-btn inline-block relative pr-20 font-medium text-13px md:text-14px lg:text-15px text-secondary-color ease-in duration-100 hover:text-secondary-color hover:tracking-wide">
-                        Check Location <img src="assets/img/icon/secondary-arrow-right.svg"
-                            class="absolute right-0 top-1 md:top-3" alt="arrow-right">
-                    </a>
-                    <a href="Form-4.html"
-                        class="inline-block font-semibold text-13px md:text-14px lg:text-15px mt-15 md:mt-25 rounded-sm text-white pt-17 pb-13 pl-35 pr-35 bg-gradient-color shadow-custom-box-shadow hover:shadow-primary-btn ease-in duration-300">Send
-                        Message</a>
-                </div>
-                <div class="single-features-box border p-[20px] sm:border-0 sm:p-0 text-center sm:text-left wow animate__animated animate__fadeInUp"
-                    data-wow-delay=".7s">
-                    <div
-                        class="icon w-60 h-60 md:w-75 md:h-75 lg:w-100 lg:h-90 rounded-full  text-center relative mb-20 md:mb-25 ml-auto mr-auto sm:ml-0 sm:mr-0">
-                        <img src="illustra\logo.png" class="absolute left-0 right-0 top-1/2 m-auto -translate-y-2/4"
-                            alt="shield-tick">
-                    </div>
-                    <h3 class="font-bold text-18px md:text-20px lg:text-24px mb-10 lg:mb-12">
-                        <a class="inline-block text-black-color hover:text-primary-color ease-in duration-300">
-                            Intern <br>Tech
-                        </a>
-                    </h3>
-                    <p
-                        class="leading-7 md:leading-8 text-optional-color mb-10 md:mb-15 text-13px md:text-15px lg:text-16px">
-                        Madhya Pradesh</p>
-                    <a href="https://goo.gl/maps/qVhCTQVAzPpDZtpt9" target="_blank"
-                        class="link-btn inline-block relative pr-20 font-medium text-13px md:text-14px lg:text-15px text-secondary-color ease-in duration-100 hover:text-secondary-color hover:tracking-wide">
-                        Check Location <img src="assets/img/icon/secondary-arrow-right.svg"
-                            class="absolute right-0 top-1 md:top-3" alt="arrow-right">
-                    </a>
-                    <a href="Form-4.html"
-                        class="inline-block font-semibold text-13px md:text-14px lg:text-15px mt-15 md:mt-25 rounded-sm text-white pt-17 pb-13 pl-35 pr-35 bg-gradient-color shadow-custom-box-shadow hover:shadow-primary-btn ease-in duration-300">Send
-                        Message</a>
-                </div>
-            </div>
-        </div>
-    </div> -->
-
-    <!-- About Area -->
-    <div class="about-area pt-60 md:pt-80 lg:pt-100 pb-60 md:pb-80 lg:pb-40 relative z-1 bg-[#fcfcfc] bg-cover bg-no-repeat bg-center"
-        style="background-image: url(assets/img/shape/bg6.jpg);">
-        <div class="container lg:pb-20 xl:pb-50">
-            <div class="grid gap-25 grid-cols-1 md:grid-cols-1 lg:grid-cols-2">
-                <div class="content xl:pl-95 self-center">
-                    <!-- <h3 class="font-black text-22px md:text-28px lg:text-35px xl:text-30px mb-12 text-black-color">If You Possess:</h3>
-                        <ul class="text-13px md:text-15px lg:text-16px leading-7 md:leading-8 text-optional-color" style="list-style-type: bullet;">
-                            <li>A strong sense of pride in working for a fast-growing company.</li>
-                            <li>Making a real difference to the world by solving real problems.</li>
-                            <li>A problem-solving approach with a keen eye for detail.</li>
-                            <li>Willingness to take on challenges and find solutions.</li>
-                            <li>The ability to work in ambiguity and navigate through uncertainty.</li>
-                            <li>Adapt to changes and still perform to achieve goals.</li>
-                            <li>Ambition, discipline and hunger to grow.</li>
-                        </ul> -->
-                    <h3 class="font-extrabold text-18px md:text-22px lg:text-25px mb-12 mt-25 lg:mt-30">
-                        If You Possess</h3>
-                    <ul class="mt-20 md:mt-25">
-                        <li
-                            class="text-[#2D2D2D] relative text-13px md:text-15px lg:text-16px font-medium pl-26 md:pl-34 mb-15 md:mb-20 last:mb-0">
-                            <img src="assets/img/icon/tick-circle.svg" class="absolute left-0 -top-2 w-[18px] md:w-auto"
-                                alt="check">
-                            A strong sense of pride in working for a fast-growing company.
-                        </li>
-                        <li
-                            class="text-[#2D2D2D] relative text-13px md:text-15px lg:text-16px font-medium pl-26 md:pl-34 mb-15 md:mb-20 last:mb-0">
-                            <img src="assets/img/icon/tick-circle.svg" class="absolute left-0 -top-2 w-[18px] md:w-auto"
-                                alt="check">
-                            Making a real difference to the world by solving real problems.
-                        </li>
-                        <li
-                            class="text-[#2D2D2D] relative text-13px md:text-15px lg:text-16px font-medium pl-26 md:pl-34 mb-15 md:mb-20 last:mb-0">
-                            <img src="assets/img/icon/tick-circle.svg" class="absolute left-0 -top-2 w-[18px] md:w-auto"
-                                alt="check">
-                            A problem-solving approach with a keen eye for detail.
-                        </li>
-                        <li
-                            class="text-[#2D2D2D] relative text-13px md:text-15px lg:text-16px font-medium pl-26 md:pl-34 mb-15 md:mb-20 last:mb-0">
-                            <img src="assets/img/icon/tick-circle.svg" class="absolute left-0 -top-2 w-[18px] md:w-auto"
-                                alt="check">
-                            Willingness to take on challenges and find solutions.
-                        </li>
-                        <li
-                            class="text-[#2D2D2D] relative text-13px md:text-15px lg:text-16px font-medium pl-26 md:pl-34 mb-15 md:mb-20 last:mb-0">
-                            <img src="assets/img/icon/tick-circle.svg" class="absolute left-0 -top-2 w-[18px] md:w-auto"
-                                alt="check">
-                            The ability to work in ambiguity and navigate through uncertainty.
-                        </li>
-                        <li
-                            class="text-[#2D2D2D] relative text-13px md:text-15px lg:text-16px font-medium pl-26 md:pl-34 mb-15 md:mb-20 last:mb-0">
-                            <img src="assets/img/icon/tick-circle.svg" class="absolute left-0 -top-2 w-[18px] md:w-auto"
-                                alt="check">
-                            Adapt to changes and still perform to achieve goals.
-                        </li>
-                        <li
-                            class="text-[#2D2D2D] relative text-13px md:text-15px lg:text-16px font-medium pl-26 md:pl-34 mb-15 md:mb-20 last:mb-0">
-                            <img src="assets/img/icon/tick-circle.svg" class="absolute left-0 -top-2 w-[18px] md:w-auto"
-                                alt="check">
-                            Ambition, discipline and hunger to grow.
-                        </li>
-                    </ul>
-                    <a href="Form-4.html"
-                        class="inline-block mt-0 md:mt-5 lg:mt-10 font-semibold text-13px md:text-14px lg:text-15px rounded-sm text-white pt-17 pb-15 pl-35 pr-35 bg-primary-gradient-colorr shadow-custom-box-shadow slide-transition"
-                        style="margin-top: 28px;">
-                        Welcome Home
-                    </a>
-                </div>
-                <div class="image self-center xl:-mr-80 wow animate__animated animate__fadeInUp"
-                data-wow-delay=".1s">
-                <img src="assets/joinus2.jpg" alt="about-image" class="rounded-md shadow-custom-box-shadow2">
-            </div>
-                <!-- <div class="image text-center self-center xl:-mr-80 wow animate__animated animate__fadeInUp"
-                    data-wow-delay=".1s">
-                    <img src="assets/joinus1-bg.png" alt="about-image">
-                </div> -->
-            </div>
-        </div>
-        <div class="top-[15%] left-[3%] absolute -z-1 hidden lg:inline"><img src="assets/img/shape/shape3.png"
-                class="animate-custom-movebounce" alt="shape"></div>
-    </div>
-    <!-- End About Area -->
-
-    <div class="top-[-35%] left-[2%] 2xl:top-[-12%] absolute -z-1 hidden xl:inline"><img
-            src="assets/img/shape/shape12.png" class="animate-custom-movebounce" alt="shape"></div>
-
-    <div class="top-[20%] left-[52%] absolute -z-1 hidden lg:inline"><img src="assets/img/shape/shape14.png"
-            class="animate-custom-rotateme" alt="shape"></div>
-    </div>
-    <!-- End Support Area -->
+            <img src="assets/joinus2.jpg" alt="Team members putting their hands together" loading="lazy">
+        </section>
+    </main>
     <!-- Footer Area -->
     <footer class="footer-area pt-60 lg:pt-100 pb-60 lg:pb-100 relative z-1 bg-cover bg-no-repeat bg-center"
         style="background-image: url(assets/img/shape/bg6.jpg); padding-bottom: 27px;">
@@ -836,6 +532,7 @@
     <script src="assets/js/wow.min.js"></script>
     <script src="assets/js/main.js"></script>
     <script src="assets/js/product-search.js"></script>
+    <script src="assets/js/careers.js" defer></script>
 </body>
 
 

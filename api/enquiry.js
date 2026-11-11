@@ -1,7 +1,8 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { isFormType, validate } = require('../lib/forms');
+const { isFormType, validate, validateResume } = require('../lib/forms');
+const { validId } = require('../lib/recruiting');
 
 const MAX_BODY_BYTES = 20 * 1024;
 const SUBMISSION_KEY_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
@@ -76,10 +77,10 @@ function createHandler(overrides = {}) {
         }
 
         // Vercel parses both supported content types into request.body.
-        const body = req.body;
-        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
             return respond(req, res, 400, 'Please complete the enquiry form.');
         }
+        const { resume: upload, ...body } = req.body;
         if (Buffer.byteLength(JSON.stringify(body), 'utf8') > MAX_BODY_BYTES) {
             return respond(req, res, 413, 'Your enquiry is too long. Please shorten it and try again.');
         }
@@ -91,9 +92,17 @@ function createHandler(overrides = {}) {
             return success(req, res);
         }
 
-        const checked = validate(body);
+        const openingId = body.openingId;
+        if (openingId !== undefined && (body.formType !== 'recruitment' || !validId(openingId))) {
+            return respond(req, res, 400, 'Please choose an opening from the Join Us page.');
+        }
+        const checked = validate(body, { hasOpening: Boolean(openingId) });
         if (checked.error) {
             return respond(req, res, 400, checked.error);
+        }
+        const attachment = validateResume(body.formType, upload);
+        if (attachment.error) {
+            return respond(req, res, attachment.status || 400, attachment.error);
         }
 
         const dependencies = { ...defaultDependencies(), ...overrides };
@@ -107,11 +116,13 @@ function createHandler(overrides = {}) {
                 res.setHeader('Retry-After', String(WINDOW_SECONDS));
                 return respond(req, res, 429, 'Too many submissions from this connection. Please try again later or email info@agromaxx.in.');
             }
-            saved = await dependencies.save({ submissionKey, formType: body.formType, values: checked.values, sourcePage: sourcePage(req) });
+            saved = await dependencies.save({ submissionKey, formType: body.formType, values: checked.values, sourcePage: sourcePage(req), resume: attachment.resume, openingId });
         } catch (error) {
             console.error('Enquiry could not be saved', { code: error && error.code });
             return respond(req, res, 503, 'We could not save your enquiry right now. Please try again later or email info@agromaxx.in.');
         }
+
+        if (saved.closedOpening) return respond(req, res, 409, 'This position is no longer open. Please return to Join Us to see available positions.');
 
         // The enquiry is safe in the database. An email problem only changes the notification's state,
         // which staff can see and retry in the dashboard, so the visitor is still told it was received.

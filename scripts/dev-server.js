@@ -25,7 +25,11 @@ const handlers = {
     enquiry: require('../api/enquiry'),
     admin: require('../api/admin'),
     adminPage: require('../api/admin-page'),
-    webhook: require('../api/brevo-webhook')
+    webhook: require('../api/brevo-webhook'),
+    catalogue: require('../api/catalogue'),
+    openings: require('../api/openings'),
+    listing: require('../api/listing'),
+    image: require('../api/image')
 };
 
 const TYPES = {
@@ -75,6 +79,13 @@ const server = http.createServer(async (req, res) => {
         let handler = null;
         if (pathname === '/api/enquiry') handler = handlers.enquiry;
         else if (pathname === '/api/brevo-webhook') handler = handlers.webhook;
+        else if (pathname === '/api/catalogue') handler = handlers.catalogue;
+        else if (pathname === '/api/openings') handler = handlers.openings;
+        else if (pathname === '/api/image') handler = handlers.image;
+        else if (pathname === '/chemicals.html' || pathname === '/nonchemical.html') {
+            handler = handlers.listing;
+            url.searchParams.set('page', pathname === '/chemicals.html' ? 'chemicals' : 'nonchemical');
+        }
         else if (/^\/api\/admin\/[a-z-]+$/.test(pathname)) {
             handler = handlers.admin;
             url.searchParams.set('route', pathname.split('/').pop());

@@ -6,14 +6,18 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('assets/js/forms.js', 'utf8');
 
-function browser(fetch) {
+function browser(fetch, resume) {
     let submit;
     const status = { textContent: '', hidden: true };
     const button = { disabled: false };
     const form = {
         action: 'https://www.agross.in/api/enquiry', dataset: {}, attributes: {},
         fields: { formType: 'contact', name: 'Visitor', email: 'visitor@example.com', message: 'Keep my message' },
-        querySelector: selector => selector === '[data-form-status]' ? status : button,
+        querySelector(selector) {
+            if (selector === '[data-form-status]') return status;
+            if (selector === 'button[type="submit"]') return button;
+            return resume ? { files: [resume] } : null;
+        },
         addEventListener: (type, fn) => { if (type === 'submit') submit = fn; },
         setAttribute(name, value) { this.attributes[name] = value; },
         removeAttribute(name) { delete this.attributes[name]; }
@@ -22,11 +26,33 @@ function browser(fetch) {
     const context = {
         document: { querySelectorAll: () => [form] }, fetch, URLSearchParams,
         FormData: class { constructor(form) { return new URLSearchParams(form.fields); } },
+        FileReader: class {
+            readAsDataURL(file) {
+                this.result = 'data:application/pdf;base64,' + file.content;
+                this.onload();
+            }
+        },
         window: { location: { assign: url => navigations.push(url) } }, TypeError, SyntaxError
     };
     vm.runInNewContext(source, context);
     return { form, status, button, navigations, submit: () => submit({ preventDefault() {} }) };
 }
+
+test('a recruitment PDF is sent with the form fields and submission key as JSON', async () => {
+    const file = { name: 'Resume.pdf', size: 15, content: 'JVBERi0xLjcKJSVFT0YK' };
+    const view = browser(async (_url, options) => {
+        assert.equal(options.headers['Content-Type'], 'application/json');
+        const body = JSON.parse(options.body);
+        assert.equal(body.formType, 'recruitment');
+        assert.equal(body.name, 'Visitor');
+        assert.deepEqual(body.resume, { name: file.name, content: file.content });
+        assert.match(body.submissionKey, /^[A-Za-z0-9_-]{16,64}$/);
+        return { ok: true, json: async () => ({ redirect: '/thankyou.html' }) };
+    }, file);
+    view.form.fields.formType = 'recruitment';
+    await view.submit();
+    assert.deepEqual(view.navigations, ['/thankyou.html']);
+});
 
 test('submits URL-encoded data and prevents duplicate clicks while sending', async () => {
     let resolve;

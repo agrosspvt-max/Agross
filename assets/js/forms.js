@@ -13,6 +13,17 @@
         return form.dataset.submissionKey;
     }
 
+    function readResume(file) {
+        if (!/\.pdf$/i.test(file.name)) throw new Error('Please attach a PDF resume.');
+        if (file.size > 2 * 1024 * 1024) throw new Error('Please choose a PDF resume that is 2 MB or smaller.');
+        return new Promise(function (resolve, reject) {
+            var reader = new FileReader();
+            reader.onload = function () { resolve({ name: file.name, content: String(reader.result).split(',')[1] }); };
+            reader.onerror = function () { reject(new Error('The resume could not be read. Please select it again.')); };
+            reader.readAsDataURL(file);
+        });
+    }
+
     document.querySelectorAll('form[data-enquiry-form]').forEach(function (form) {
         var status = form.querySelector('[data-form-status]');
         var button = form.querySelector('button[type="submit"]');
@@ -29,10 +40,19 @@
 
             try {
                 var data = new URLSearchParams(new FormData(form));
+                data.delete('resume');
                 data.set('submissionKey', submissionKey(form));
+                var headers = { Accept: 'application/json' };
+                var resume = form.querySelector('input[type="file"][name="resume"]')?.files?.[0];
+                if (resume) {
+                    var values = Object.fromEntries(data);
+                    values.resume = await readResume(resume);
+                    data = JSON.stringify(values);
+                    headers['Content-Type'] = 'application/json';
+                }
                 var response = await fetch(form.action, {
                     method: 'POST',
-                    headers: { Accept: 'application/json' },
+                    headers: headers,
                     body: data
                 });
                 var result = await response.json();

@@ -30,6 +30,25 @@ curl -X POST http://localhost:3000/api/brevo-webhook \
   -d '{"event":"delivered","message-id":"<mock-1@agross.local>"}'
 ```
 
+## Product catalogue (Phase 2)
+
+```bash
+npm run db:migrate                 # adds the catalogue tables (002)
+npm run catalogue:import           # imports the existing 106 products as DRAFTS and rewrites docs/catalogue-reconciliation.md
+npm run catalogue:import -- --report-only    # only rewrite the report
+```
+
+Sign in, open **Products**. The public site keeps its original pages until you press
+"Switch on the managed catalogue" (locally this shows only the products you published).
+Switch it off again from the same card. The import never publishes and never overwrites a product that already exists.
+
+## Recruiting
+
+Run `npm run db:migrate` to add job openings, then sign in and open **Recruiting**.
+Set a designation, an optional area, and a description. Choose **Open** to list the role on
+`/joinus.html`. Closing a role removes it from the public list and stops new
+applications for it. Earlier applications and their resumes remain in **Enquiries**.
+
 ## Owner account and password reset
 
 ```bash

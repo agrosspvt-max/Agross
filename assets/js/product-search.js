@@ -1,14 +1,70 @@
 /*
  * Header product search (desktop #search-input and mobile #search-input1).
  *
- * One shared product list is built from the two catalogue files, so the
+ * One shared product list is built from the published catalogue (/api/catalogue), so the
  * suggestions always match what the detail pages can open:
- *   chemical.json    -> product.html?productId=<id>
- *   nonchemical.json -> nonchemical-details.html?productId=<id>
+ *   chemical     -> product.html?productId=<id>
+ *   nonchemical  -> nonchemical-details.html?productId=<id>
+ * Until the managed catalogue is switched on (or if it cannot be reached) the original
+ * chemical.json / nonchemical.json files are used instead.
+ * window.AgrossCatalogue is also used by the product detail pages.
  * Pages without the search controls are left alone.
  */
 (function () {
     'use strict';
+
+    // ---- catalogue loading (shared with the detail pages) ------------------------------------
+
+    var STATIC_FILES = { chemical: 'chemical.json', nonchemical: 'nonchemical.json' };
+
+    function readJson(url, options) {
+        return fetch(url, options).then(function (response) {
+            return response.json().catch(function () { return null; }).then(function (body) {
+                return { status: response.status, ok: response.ok, body: body };
+            });
+        });
+    }
+
+    // Returns { records, managed }. "managed" is false when the original JSON file was used.
+    function loadList(catalogue) {
+        return readJson('/api/catalogue?catalogue=' + catalogue, { cache: 'no-cache' })
+            .then(function (result) {
+                if (result.ok && Array.isArray(result.body)) { return { records: result.body, managed: true }; }
+                throw new Error('static');
+            })
+            .catch(function () {
+                return readJson(STATIC_FILES[catalogue], { cache: 'no-cache' }).then(function (result) {
+                    if (!result.ok || !Array.isArray(result.body)) { throw new Error(STATIC_FILES[catalogue] + ' ' + result.status); }
+                    return { records: result.body, managed: false };
+                });
+            });
+    }
+
+    // Returns { state: 'ok' | 'unavailable' | 'missing' | 'preview-denied', product? }.
+    function loadProduct(catalogue, productId, previewId) {
+        if (previewId) {
+            return readJson('/api/admin/product-preview?id=' + encodeURIComponent(previewId), { credentials: 'same-origin', cache: 'no-store' })
+                .then(function (result) {
+                    return result.ok && result.body && result.body.product ? { state: 'ok', product: result.body.product } : { state: 'preview-denied' };
+                });
+        }
+        return readJson('/api/catalogue?catalogue=' + catalogue + '&productId=' + encodeURIComponent(productId), { cache: 'no-cache' })
+            .then(function (result) {
+                if (result.ok && result.body && result.body.product) { return { state: 'ok', product: result.body.product }; }
+                if (result.status === 410) { return { state: 'unavailable' }; }
+                if (result.status === 404 && result.body && result.body.state === 'missing') { return { state: 'missing' }; }
+                throw new Error('static');
+            })
+            .catch(function () {
+                return readJson(STATIC_FILES[catalogue], { cache: 'no-cache' }).then(function (result) {
+                    if (!result.ok || !Array.isArray(result.body)) { throw new Error('The catalogue could not be loaded'); }
+                    var product = result.body.filter(function (record) { return record.productId === productId; })[0];
+                    return product ? { state: 'ok', product: product } : { state: 'missing' };
+                });
+            });
+    }
+
+    window.AgrossCatalogue = { loadList: loadList, loadProduct: loadProduct };
 
     var CATALOGUES = [
         { key: 'chemical', file: 'chemical.json', page: 'product.html', label: 'Chemical' },
@@ -69,15 +125,17 @@
     function buildEntries(lists) {
         var entries = [];
         CATALOGUES.forEach(function (catalogue, index) {
-            var records = lists[index];
-            if (!Array.isArray(records)) { return; }
+            var loaded = lists[index];
+            if (!loaded || !Array.isArray(loaded.records)) { return; }
+            var records = loaded.records;
             var seen = new Set();
             records.forEach(function (record) {
                 if (!record || typeof record.productId !== 'string' || seen.has(record.productId)) { return; }
                 // The detail page opens the first record with a given productId.
                 seen.add(record.productId);
                 var name = String(record.name || record.productId).trim();
-                var aliases = ALIASES[catalogue.key + ':' + record.productId] || [];
+                // Managed records carry their own aliases; the built-in list only backs the original JSON files.
+                var aliases = loaded.managed ? (Array.isArray(record.aliases) ? record.aliases : []) : (ALIASES[catalogue.key + ':' + record.productId] || []);
                 entries.push({
                     id: record.productId,
                     name: name,
@@ -102,16 +160,7 @@
     }
 
     function fetchCatalogue(catalogue) {
-        return fetch(catalogue.file, { cache: 'no-cache' })
-            .then(function (response) {
-                if (!response.ok) { throw new Error(catalogue.file + ' ' + response.status); }
-                return response.json();
-            })
-            .then(function (records) {
-                if (!Array.isArray(records)) { throw new Error(catalogue.file + ' is not a list'); }
-                return records;
-            })
-            .catch(function () { return null; });
+        return loadList(catalogue.key).catch(function () { return null; });
     }
 
     function notify() {

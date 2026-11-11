@@ -1,6 +1,6 @@
 # Agross admin dashboard: design proposal (revised scope)
 
-Status: **Phase 1 (sign-in and enquiry inbox) is built and tested locally with sample data and a mock Brevo. Phase 2 (product editor and catalogue migration) is not started. Nothing is deployed or connected to any live account.** Decision recorded: product images will be stored in PostgreSQL (option A, section 9).
+Status: **Phase 1 (sign-in and enquiry inbox, commit 88142e9) and Phase 2 (product editor, managed catalogue and import) are built and tested locally with sample data and a mock Brevo. Nothing is deployed, published or connected to any live account. The imported catalogue is 106 drafts awaiting the owner's decisions (`docs/catalogue-reconciliation.md`).** Decision recorded: product images will be stored in PostgreSQL (option A, section 9).
 Revised 2026-11-11 from the repository on `main` (`17c7169`). Vendor costs and limits are not stated as facts where I have not verified them on the vendor's own page; they are marked "to confirm".
 
 ## 0. Scope
@@ -188,3 +188,18 @@ Tests: add a product with an image, publish it, edit it, archive it, restore it,
 5. **Production owner** and **who may see recruitment submissions** (before more accounts are added).
 6. **Retention policy** (before any automatic deletion exists).
 7. Whether you want an emailed owner password reset link later, in addition to the command-line reset.
+
+## 14. Phase 2 as built (local)
+
+- **Managed catalogue is OFF by default.** A switch on the Products page (needs `products_publish`) turns the public site over to the managed catalogue and back instantly. While it is off, visitors get the original pages and JSON files exactly as today; this is also the rollback.
+- `/chemicals.html` and `/nonchemical.html` are answered by `api/listing.js`, which fills the existing page (cards, tab buttons, grids) from published products, so the cards stay in the HTML. If the catalogue is off, has nothing published for that page, or the database is down, the original page is served. The two pages carry invisible `catalogue:start` / `catalogue:end` markers; they are not copied into the production build (so the function answers the request) but are read by the function as its template.
+- `/api/catalogue` serves detail pages and search; `/api/image` serves uploaded images of published products only; staff see draft images through the admin preview. New data: tables in `db/migrations/002_catalogue.sql`.
+- Images: existing ones stay in `products/`; uploads (PNG/JPEG/WebP, up to 2 MB, checked by content) are stored in PostgreSQL.
+- Draft, preview (card and the real detail page via `?preview=`), publish, archive, restore, discard draft, history (load an older version into the draft), permanent deletion (archived or never-published only, ID typed back), optimistic locking against overlapping edits.
+- **Refresh window:** browsers always revalidate; the edge may keep a copy for 30 s (plus up to 60 s while it refreshes), set with `Vercel-CDN-Cache-Control`. This header and Vercel's treatment of it must be confirmed at the hosting review.
+- **Known behaviour to decide:** the grid shows one display order; the "All" grid will now include `ninja` and `fasal vriddhi kit`, which are in category tabs today but not under "All".
+
+## 15. Editor layout and product photo sizing (local)
+
+- **Editor:** on desktop the form is on the left and a **Product page preview** is on the right (the real public detail page in an embedded, staff-only view of the saved draft, drawn at desktop width and scaled to fit; plus the grid-card preview). The preview loads with the editor and refreshes after each successful **Save draft**, including a replaced image; a failed save keeps the form and shows the error. On narrow screens the preview stacks under the form. Status, History and Delete permanently are in a single collapsed **Product management** section below the editor. Screenshots: `docs/screenshots/`.
+- **Photos:** `assets/js/product-image.js` finds the visible pack inside each picture (transparent or plain background removed), scales it to a fixed stage (80% of the stage height/width, picture never stretched or cropped) and centres it. Both detail pages share one stage and the same CSS; the preview uses the same pages. Checked on every product image (102): visible pack heights are 308 to 368 px on a 460 px stage; no image needed a special case.

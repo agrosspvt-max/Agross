@@ -21,7 +21,9 @@ async function databaseAvailable() {
 }
 
 async function cleanDatabase() {
-    await db.query('TRUNCATE enquiries, admin_users, rate_limits, audit_log RESTART IDENTITY CASCADE');
+    await db.query('TRUNCATE enquiries, admin_users, rate_limits, audit_log, products, product_images, job_openings RESTART IDENTITY CASCADE');
+    // Truncating admin_users cascades to app_settings (it records who changed a setting), so put the defaults back.
+    await db.query("INSERT INTO app_settings (key, value) VALUES ('catalogue_live', 'false'), ('catalogue_version', '0') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value");
 }
 
 function response() {

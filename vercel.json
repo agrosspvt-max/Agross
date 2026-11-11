@@ -12,9 +12,26 @@
     },
     "api/admin-page.js": {
       "includeFiles": "admin/views/**"
+    },
+    "api/listing.js": {
+      "includeFiles": "{chemicals,nonchemical}.html"
+    },
+    "api/catalogue.js": {
+      "maxDuration": 10
+    },
+    "api/image.js": {
+      "maxDuration": 10
     }
   },
   "rewrites": [
+    {
+      "source": "/chemicals.html",
+      "destination": "/api/listing?page=chemicals"
+    },
+    {
+      "source": "/nonchemical.html",
+      "destination": "/api/listing?page=nonchemical"
+    },
     {
       "source": "/api/admin/:route",
       "destination": "/api/admin?route=:route"

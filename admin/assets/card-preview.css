@@ -1,0 +1,13 @@
+/* The product card colours live in a <style> block on the public listing pages, so the editor's preview repeats them. */
+.background11 {
+    background-color: #015141;
+    border-radius: 3%;
+    width: auto;
+    padding-top: 25px;
+}
+
+.background11:hover {
+    border: 2px solid #A2F1A2;
+    transition: 0.3s;
+    box-shadow: 0 3px 10px rgb(0 0 0 / 0.2);
+}
