@@ -17,4 +17,6 @@ for (const name of fs.readdirSync(root)) {
 for (const name of ['assets', 'illustra', 'products']) {
     fs.cpSync(path.join(root, name), path.join(output, name), { recursive: true });
 }
+// Admin styles and scripts are public files with no data; the admin pages themselves are served by a checked function.
+fs.cpSync(path.join(root, 'admin', 'assets'), path.join(output, 'admin-assets'), { recursive: true });
 console.log('Website assets prepared in public/.');

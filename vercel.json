@@ -6,6 +6,26 @@
   "functions": {
     "api/enquiry.js": {
       "maxDuration": 20
+    },
+    "api/admin.js": {
+      "maxDuration": 20
+    },
+    "api/admin-page.js": {
+      "includeFiles": "admin/views/**"
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/admin/:route",
+      "destination": "/api/admin?route=:route"
+    },
+    {
+      "source": "/admin",
+      "destination": "/api/admin-page?p="
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/api/admin-page?p=:path*"
+    }
+  ]
 }

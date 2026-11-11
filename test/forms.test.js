@@ -67,3 +67,18 @@ test('network and non-JSON errors show a useful fallback without redirecting', a
         assert.equal(view.button.disabled, false); assert.deepEqual(view.navigations, []);
     }
 });
+
+test('every attempt for one page view carries the same submission key, so a retry is saved once', async () => {
+    const keys = [];
+    let fail = true;
+    const view = browser(async (url, options) => {
+        keys.push(options.body.get('submissionKey'));
+        return { ok: !fail, json: async () => fail ? { message: 'Try again.' } : { redirect: '/thankyou.html' } };
+    });
+    await view.submit();
+    fail = false;
+    await view.submit();
+    assert.equal(keys.length, 2);
+    assert.match(keys[0], /^[A-Za-z0-9_-]{16,64}$/);
+    assert.equal(keys[0], keys[1]);
+});

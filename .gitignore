@@ -10,3 +10,6 @@
 /public/
 /node_modules/
 /.vercel/
+
+# local development database (sample data only)
+/.local/

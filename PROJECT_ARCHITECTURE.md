@@ -100,3 +100,11 @@ Google Fonts, Translate and Maps; CDN-hosted jQuery, Bootstrap, Popper, Font Awe
 - Broken internal links: `Value.html` (appears commented out in nav), `pricing.html`, `premium.html`, `profile-authentication.html`, `blog-grid.html`, `blog-details.html`, `agross.html`.
 - Markup: `index.html` lacks `<html>`; `thankyou.html` lacks viewport meta; 18 pages share `<title>Agross</title>`.
 - Page copy of `about`, `innovation`, `fasal`, `success-stories`, `joinus`, `Partner-with-us` was reviewed at heading level only.
+
+## Admin dashboard (branch `feature/admin-dashboard`, local only, not deployed)
+
+- Design and decisions: `docs/admin-dashboard-proposal.md`. Local setup: `docs/local-development.md`.
+- `api/enquiry.js` now saves each enquiry and a pending notification job in PostgreSQL before confirming, then sends through Brevo. `lib/` holds shared code (`forms.js` validation, `inbox.js` queries, `notify.js` Brevo and delivery events, `auth.js` sign-in and sessions, `security.js` rate limits, `db.js` migrations).
+- Admin pages (`admin/views/*.html`) are served only by `api/admin-page.js` after a session check; the API is `api/admin.js` (one function, `/api/admin/<route>`); delivery events arrive at `api/brevo-webhook.js`.
+- Tables are in `db/migrations/`. Owner-only sign-in with scrypt hashes, hashed session tokens, login throttling, CSRF token and origin checks.
+- Not yet built: product editor, catalogue API, image storage, scheduled email retries, MFA.

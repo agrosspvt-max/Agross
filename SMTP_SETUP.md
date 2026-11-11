@@ -1,15 +1,27 @@
 # Website enquiries
 
 The contact, dealership, contract farming and recruitment forms post to
-`/api/enquiry`. The Vercel function sends the submission through Brevo to
-`info@agromaxx.in` and uses the visitor's email as the reply address.
+`/api/enquiry`. The function validates the form, **saves the enquiry and a
+pending email job in PostgreSQL**, and only then confirms to the visitor. It
+then sends the notification through Brevo to `info@agromaxx.in`, using the
+visitor's email as Reply-To. If Brevo fails, the enquiry stays saved and
+visible in the admin dashboard with a Retry button.
 
-Set `BREVO_API_KEY` as a sensitive variable in the Vercel project, and set
-`FORM_FROM_EMAIL` to the verified Brevo sender `info@agromaxx.in`. Select the
-environment that will run the forms. A new deployment picks up the variables.
+Required environment variables (set them in the Vercel project; never commit values):
 
-Run `npm test` to check submission behavior with a mock email provider. After
-deployment, submit a test enquiry and confirm that it reaches the inbox.
+| Name | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string. Without it, the forms return an error and nothing is confirmed. |
+| `BREVO_API_KEY` | Brevo API key (sensitive). |
+| `FORM_FROM_EMAIL` | Verified Brevo sender, `info@agromaxx.in`. |
+| `BREVO_WEBHOOK_SECRET` | Shared secret Brevo sends with delivery events to `/api/brevo-webhook`. Delivered is shown only after such an event. |
+| `IP_HASH_SALT` | Long random string used to hash IP addresses for rate limiting. |
+
+Apply database changes with `npm run db:migrate` (uses `DATABASE_URL`).
+Do not deploy this version before `DATABASE_URL` and the migration are in place.
+
+Local development uses a private local PostgreSQL and a mock Brevo that never
+sends email. See `docs/local-development.md`. Run `npm test` for the tests.
 
 ## Legacy PHP handlers
 

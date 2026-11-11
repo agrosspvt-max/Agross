@@ -1,19 +1,9 @@
 'use strict';
 
-const { test, afterEach, mock } = require('node:test');
+const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const handler = require('../api/enquiry');
-
-const previousKey = process.env.BREVO_API_KEY;
-const previousSender = process.env.FORM_FROM_EMAIL;
-afterEach(() => {
-    mock.restoreAll();
-    if (previousKey === undefined) delete process.env.BREVO_API_KEY;
-    else process.env.BREVO_API_KEY = previousKey;
-    if (previousSender === undefined) delete process.env.FORM_FROM_EMAIL;
-    else process.env.FORM_FROM_EMAIL = previousSender;
-});
+const { createHandler } = require('../api/enquiry');
 
 const examples = {
     contact: { name: 'Visitor', email: 'visitor@example.com', website: 'https://example.com', phone: '9876543210', message: 'Please contact me.' },
@@ -43,39 +33,49 @@ function response() {
     };
 }
 
-function provider(implementation = async () => ({ ok: true, json: async () => ({ messageId: 'test-message-id' }) })) {
-    process.env.BREVO_API_KEY = 'test-key-not-a-real-credential';
-    process.env.FORM_FROM_EMAIL = 'verified@example.com';
-    return mock.method(global, 'fetch', implementation);
+function response() {
+    return {
+        headers: {}, statusCode: 200,
+        setHeader(name, value) { this.headers[name.toLowerCase()] = value; return this; },
+        status(code) { this.statusCode = code; return this; },
+        json(body) { this.body = body; return this; },
+        send(body) { this.body = body; return this; },
+        end() { return this; }
+    };
+}
+
+// Stand-ins for the database and email steps, so these tests cover only the form handling rules.
+function setup(overrides = {}) {
+    const calls = { save: [], deliver: [] };
+    const handler = createHandler({
+        save: async input => { calls.save.push(input); return { id: 'enquiry-' + calls.save.length, created: true }; },
+        deliver: async id => { calls.deliver.push(id); return { state: 'accepted' }; },
+        tooManyRequests: async () => false,
+        ...overrides
+    });
+    return { calls, handler };
 }
 
 for (const type of Object.keys(examples)) {
-    test(type + ' delivers every field to the fixed recipient with a visitor reply-to', async () => {
-        const send = provider();
+    test(type + ' saves every field once and then attempts the notification', async () => {
+        const { calls, handler } = setup();
         const req = request(type);
-        // Client-supplied recipients and senders must never influence delivery.
+        // Client-supplied recipients and senders are never used.
         req.body.to = 'untrusted@example.com';
         req.body.sender = 'untrusted@example.com';
         const res = response();
         await handler(req, res);
         assert.equal(res.statusCode, 200);
         assert.equal(res.body.redirect, '/thankyou.html');
-        assert.equal(send.mock.callCount(), 1);
-        const [url, options] = send.mock.calls[0].arguments;
-        const email = JSON.parse(options.body);
-        assert.equal(url, 'https://api.brevo.com/v3/smtp/email');
-        assert.equal(options.headers['api-key'], process.env.BREVO_API_KEY);
-        assert.deepEqual(email.to, [{ email: 'info@agromaxx.in' }]);
-        assert.equal(email.sender.email, 'verified@example.com');
-        assert.equal(email.replyTo.email, examples[type].email);
-        assert.equal(email.subject, subjects[type]);
-        assert.equal(email.htmlContent, undefined);
-        for (const value of Object.values(examples[type])) assert.ok(email.textContent.includes(value));
+        assert.equal(calls.save.length, 1);
+        assert.equal(calls.save[0].formType, type);
+        assert.deepEqual(calls.save[0].values, examples[type]);
+        assert.equal(calls.deliver.length, 1);
     });
 }
 
-test('ordinary HTML form posts redirect only after successful provider acceptance', async () => {
-    provider();
+test('ordinary HTML form posts redirect only after the enquiry is saved', async () => {
+    const { handler } = setup();
     const req = request();
     req.headers.accept = 'text/html';
     const res = response();
@@ -86,7 +86,7 @@ test('ordinary HTML form posts redirect only after successful provider acceptanc
 });
 
 test('every required field is checked server-side', async () => {
-    const send = provider();
+    const { calls, handler } = setup();
     for (const [type, fields] of Object.entries(examples)) {
         for (const field of Object.keys(fields)) {
             if (type === 'contact' && ['website', 'phone'].includes(field)) continue;
@@ -97,24 +97,24 @@ test('every required field is checked server-side', async () => {
             assert.equal(res.statusCode, 400, type + ': ' + field);
         }
     }
-    assert.equal(send.mock.callCount(), 0);
+    assert.equal(calls.save.length, 0);
 });
 
 test('general enquiries can be sent without a website or phone number', async () => {
-    const send = provider();
+    const { calls, handler } = setup();
     const req = request();
     delete req.body.website;
     req.body.phone = ' ';
     const res = response();
     await handler(req, res);
     assert.equal(res.statusCode, 200);
-    assert.equal(send.mock.callCount(), 1);
-    const { textContent } = JSON.parse(send.mock.calls[0].arguments[1].body);
-    assert.doesNotMatch(textContent, /Website:|Phone No:/);
+    assert.equal(calls.save.length, 1);
+    assert.equal(Object.hasOwn(calls.save[0].values, 'website'), false);
+    assert.equal(Object.hasOwn(calls.save[0].values, 'phone'), false);
 });
 
 test('invalid email, duplicate values, select placeholders and long fields are rejected', async () => {
-    const send = provider();
+    const { calls, handler } = setup();
     for (const fields of [
         { email: 'invalid' }, { email: 'visitor@example.com\r\nBcc: other@example.com' },
         { email: ['a@example.com', 'b@example.com'] }, { name: 'x'.repeat(121) }, { name: 'test\u0000' }
@@ -124,69 +124,90 @@ test('invalid email, duplicate values, select placeholders and long fields are r
     }
     const req = request('dealership'); req.body.state = 'SelectState';
     const res = response(); await handler(req, res); assert.equal(res.statusCode, 400);
-    assert.equal(send.mock.callCount(), 0);
+    assert.equal(calls.save.length, 0);
 });
 
 test('unknown or inherited form types and malformed bodies are rejected', async () => {
-    const send = provider();
+    const { calls, handler } = setup();
     for (const body of [undefined, null, [], 'name=visitor', {}, { formType: '__proto__' }, { formType: 'toString' }, { formType: ['contact'] }]) {
         const res = response(); await handler(request('contact', { body }), res); assert.equal(res.statusCode, 400);
     }
-    assert.equal(send.mock.callCount(), 0);
+    assert.equal(calls.save.length, 0);
 });
 
-test('oversized payloads and unsupported content types never reach the provider', async () => {
-    const send = provider();
+test('oversized payloads and unsupported content types are never saved', async () => {
+    const { calls, handler } = setup();
     const req = request(); req.body.message = 'x'.repeat(21000);
     const res = response(); await handler(req, res); assert.equal(res.statusCode, 413);
     const other = request(); other.headers['content-type'] = 'text/plain';
     const otherRes = response(); await handler(other, otherRes); assert.equal(otherRes.statusCode, 415);
-    assert.equal(send.mock.callCount(), 0);
+    assert.equal(calls.save.length, 0);
 });
 
 test('cross-site and malformed origins are rejected; same-site preview hosts work', async () => {
-    const send = provider();
+    const { calls, handler } = setup();
     for (const origin of ['https://untrusted.example', 'not-a-url']) {
         const req = request(); req.headers.origin = origin;
         const res = response(); await handler(req, res); assert.equal(res.statusCode, 403);
     }
     const crossSite = request(); delete crossSite.headers.origin; crossSite.headers['sec-fetch-site'] = 'cross-site';
     const crossRes = response(); await handler(crossSite, crossRes); assert.equal(crossRes.statusCode, 403);
-    assert.equal(send.mock.callCount(), 0);
+    assert.equal(calls.save.length, 0);
     const preview = request(); preview.headers.host = 'agross-preview.vercel.app'; preview.headers.origin = 'https://agross-preview.vercel.app';
     const res = response(); await handler(preview, res); assert.equal(res.statusCode, 200);
 });
 
-test('only POST is allowed and honeypot submissions send no mail', async () => {
-    const send = provider();
+test('only POST is allowed and honeypot submissions are not saved', async () => {
+    const { calls, handler } = setup();
     const get = response(); await handler(request('contact', { method: 'GET' }), get);
     assert.equal(get.statusCode, 405); assert.equal(get.headers.allow, 'POST');
     const req = request(); req.body.fax = 'spam';
     const res = response(); await handler(req, res); assert.equal(res.statusCode, 200);
-    assert.equal(send.mock.callCount(), 0);
+    assert.equal(calls.save.length, 0);
+    assert.equal(calls.deliver.length, 0);
 });
 
-test('missing configuration fails without falsely confirming submission', async () => {
-    const send = provider();
-    delete process.env.BREVO_API_KEY;
-    const res = response(); await handler(request(), res); assert.equal(res.statusCode, 503);
-    assert.equal(send.mock.callCount(), 0); assert.equal(res.body.redirect, undefined);
-});
-
-test('provider rejection, malformed success and timeout never redirect or leak provider details', async () => {
-    mock.method(console, 'error', () => {});
-    for (const [implementation, status] of [
-        [async () => ({ ok: false, status: 401, json: async () => ({ message: 'private provider detail' }) }), 502],
-        [async () => ({ ok: true, json: async () => ({}) }), 502],
-        [async () => { throw Object.assign(new Error('private provider detail'), { name: 'TimeoutError' }); }, 504],
-        [async () => { throw new Error('private provider detail'); }, 502]
-    ]) {
-        const send = provider(implementation);
-        const res = response(); await handler(request(), res);
-        assert.equal(res.statusCode, status); assert.equal(res.body.redirect, undefined);
-        assert.ok(!JSON.stringify(res.body).includes('private provider detail'));
-        send.mock.restore();
+test('a valid submission key is kept; a missing or odd one gets a server key', async () => {
+    const { calls, handler } = setup();
+    const keyed = request(); keyed.body.submissionKey = 'abcdef0123456789-key';
+    await handler(keyed, response());
+    assert.equal(calls.save[0].submissionKey, 'abcdef0123456789-key');
+    for (const bad of [undefined, 'short', 'has spaces in it here', ['abcdef0123456789-key']]) {
+        const req = request(); req.body.submissionKey = bad;
+        await handler(req, response());
     }
+    assert.ok(calls.save.slice(1).every(call => call.submissionKey.startsWith('server-')));
+});
+
+test('a repeat of an enquiry that was already saved confirms it without a second notification', async () => {
+    const { calls, handler } = setup({ save: async () => ({ id: 'existing', created: false }) });
+    const res = response(); await handler(request(), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.deliver.length, 0);
+});
+
+test('when the enquiry cannot be saved the visitor is not told it was received', async () => {
+    const { calls, handler } = setup({ save: async () => { throw Object.assign(new Error('private database detail'), { code: 'ECONNREFUSED' }); } });
+    const res = response(); await handler(request(), res);
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.body.redirect, undefined);
+    assert.ok(!JSON.stringify(res.body).includes('private database detail'));
+    assert.equal(calls.deliver.length, 0);
+});
+
+test('too many submissions from one connection are refused', async () => {
+    const { calls, handler } = setup({ tooManyRequests: async () => true });
+    const res = response(); await handler(request(), res);
+    assert.equal(res.statusCode, 429);
+    assert.equal(calls.save.length, 0);
+});
+
+test('an email problem never hides a saved enquiry from the visitor', async () => {
+    const { calls, handler } = setup({ deliver: async () => { throw new Error('private provider detail'); } });
+    const res = response(); await handler(request(), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.redirect, '/thankyou.html');
+    assert.equal(calls.save.length, 1);
 });
 
 test('the four HTML forms use the matching handler contract and no agency endpoints', () => {
