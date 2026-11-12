@@ -317,6 +317,7 @@ test('recruitment records are hidden from everyone without recruitment access, e
     assert.ok(!overview.body.byForm.some(row => row.type === 'recruitment'));
     assert.equal((await call(admin, { route: 'enquiry', query: { id: hiddenId }, cookie })).statusCode, 404);
     assert.equal((await call(admin, { method: 'POST', route: 'enquiry-status', body: { id: hiddenId, status: 'resolved' }, cookie, csrf })).statusCode, 404);
+    assert.equal((await call(admin, { method: 'POST', route: 'enquiry-status', body: { id: hiddenId, status: 'shortlisted', note: 'Private note' }, cookie, csrf })).statusCode, 404);
     assert.equal((await call(admin, { method: 'POST', route: 'enquiry-retry', body: { id: hiddenId }, cookie, csrf })).statusCode, 404);
     assert.equal((await db.query("SELECT status FROM enquiries WHERE form_type = 'recruitment'")).rows[0].status, 'new');
 
@@ -567,6 +568,45 @@ test('opening a record shows every submitted field in form order, and status cha
     const audit = (await db.query("SELECT metadata FROM audit_log WHERE action = 'enquiry_status_changed' ORDER BY id")).rows.map(row => row.metadata.status);
     assert.deepEqual(audit, ['in_progress', 'resolved', 'new']);
     assert.ok(!JSON.stringify((await db.query('SELECT metadata FROM audit_log')).rows).includes('Line one'), 'audit never copies enquiry text');
+});
+
+test('recruitment outcomes are filterable and each follow-up status keeps its own private note', async t => {
+    if (!available) return t.skip('no test database');
+    await createUser();
+    const { cookie, csrf } = await signIn();
+    const id = await addEnquiry('recruitment', 'follow-up-recruitment-012345', recruit(1));
+    const contactId = await addEnquiry('contact', 'follow-up-contact-012345', contact(1));
+    const save = body => call(admin, { method: 'POST', route: 'enquiry-status', body: { id, ...body }, cookie, csrf });
+    const detail = () => call(admin, { route: 'enquiry', query: { id }, cookie });
+    const filter = status => call(admin, { route: 'enquiries', query: { status }, cookie });
+
+    assert.deepEqual((await detail()).body.statusNotes, {});
+    assert.equal((await save({ id: contactId, status: 'shortlisted' })).statusCode, 400);
+    assert.equal((await save({ status: 'shortlisted', note: 'x'.repeat(2001) })).statusCode, 400);
+
+    const shortlisted = await save({ status: 'shortlisted', note: '  Schedule a call.\nConfirm availability.  ', expectedStatus: 'new' });
+    assert.equal(shortlisted.statusCode, 200);
+    assert.equal(shortlisted.body.followUp.statusChangedBy, 'Owner');
+    assert.equal((await filter('shortlisted')).body.items[0].id, id);
+    const noteOnly = await save({ status: 'shortlisted', note: 'Call confirmed.', expectedStatus: 'shortlisted' });
+    assert.equal(noteOnly.statusCode, 200);
+    assert.deepEqual(noteOnly.body.followUp.statusChangedAt, shortlisted.body.followUp.statusChangedAt);
+
+    assert.equal((await save({ status: 'rejected', note: 'Position filled.', expectedStatus: 'new' })).statusCode, 409);
+    assert.equal((await save({ status: 'rejected', note: 'Position filled.', expectedStatus: 'shortlisted' })).statusCode, 200);
+    assert.equal((await filter('shortlisted')).body.total, 0);
+    const rejectedList = (await filter('rejected')).body;
+    assert.equal(rejectedList.items[0].id, id);
+    assert.equal(rejectedList.items[0].statusNotes, undefined);
+    assert.deepEqual((await detail()).body.statusNotes, { shortlisted: 'Call confirmed.', rejected: 'Position filled.' });
+
+    assert.equal((await save({ status: 'shortlisted' })).statusCode, 200);
+    assert.equal((await detail()).body.statusNotes.shortlisted, 'Call confirmed.');
+    assert.equal((await save({ status: 'shortlisted', note: ' ' })).statusCode, 200);
+    assert.deepEqual((await detail()).body.statusNotes, { rejected: 'Position filled.' });
+    const log = (await db.query("SELECT metadata FROM audit_log WHERE entity_id = $1", [id])).rows;
+    assert.ok(log.some(row => row.metadata.noteChanged));
+    assert.doesNotMatch(JSON.stringify(log), /Call confirmed|Position filled/);
 });
 
 test('email state is visible and filterable, and a failed email can be retried from the dashboard', async t => {

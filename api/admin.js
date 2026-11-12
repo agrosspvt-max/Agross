@@ -128,10 +128,9 @@ async function route(req, res, name) {
         if (!session) return null;
         const body = jsonBody(req);
         if (!body || !UUID.test(String(body.id))) return sendError(res, 400, 'Choose an enquiry.');
-        const result = await inbox.setStatus(body.id, body.status, session.user);
+        const result = await inbox.setStatus(body.id, body.status, session.user, { note: body.note, expectedStatus: body.expectedStatus });
         if (!result.ok) return sendError(res, result.status, result.message);
-        await auth.audit(session.user.id, 'enquiry_status_changed', 'enquiry', body.id, { status: body.status });
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, followUp: result.followUp });
     }
 
     if (name === 'enquiry-retry') {

@@ -6,7 +6,8 @@
         ['contact', 'General Contact'], ['dealership', 'Dealership'],
         ['farming', 'Contract or Custom Farming'], ['recruitment', 'Recruitment']
     ];
-    var STATUS_LABELS = { 'new': 'New', in_progress: 'In progress', resolved: 'Resolved' };
+    var STATUS_LABELS = { 'new': 'New', in_progress: 'In progress', resolved: 'Resolved', shortlisted: 'Shortlisted', rejected: 'Rejected' };
+    var GENERAL_STATUSES = ['new', 'in_progress', 'resolved'];
     var EMAIL_LABELS = { pending: 'Pending', accepted: 'Accepted by Brevo', delivered: 'Delivered', failed: 'Failed', unconfirmed: 'Unconfirmed' };
     var ERROR_TEXT = {
         not_configured: 'Email sending is not configured.',
@@ -339,7 +340,8 @@
 
             var filter = dateFilter(from, to, function () { page = 1; load(); });
             var formSelect = select('form', 'Form', FORM_TYPES, params.get('form'));
-            var statusSelect = select('status', 'Status', Object.keys(STATUS_LABELS).map(function (key) { return [key, STATUS_LABELS[key]]; }), params.get('status'));
+            var statuses = can('recruitment') ? Object.keys(STATUS_LABELS) : GENERAL_STATUSES;
+            var statusSelect = select('status', 'Status', statuses.map(function (key) { return [key, STATUS_LABELS[key]]; }), params.get('status'));
             var emailSelect = select('email', 'Email', Object.keys(EMAIL_LABELS).map(function (key) { return [key, EMAIL_LABELS[key]]; }), params.get('email'));
             var search = el('input', { type: 'search', name: 'q', value: params.get('q') || '', placeholder: 'Name, company, email, phone' });
             var searchLabel = el('label', {}, ['Search', search]);
@@ -440,6 +442,7 @@
         start('enquiry', function (main) {
             clear(main);
             var holder = el('div', {});
+            var noteDrafts = {};
             main.appendChild(el('a', { class: 'back', href: '/admin/enquiries', text: '← Back to enquiries' }));
             main.appendChild(holder);
             load();
@@ -452,6 +455,75 @@
                     }
                     render(result.data);
                 });
+            }
+
+            function followUpCard(enquiry) {
+                var selected = enquiry.status;
+                var statuses = enquiry.formType === 'recruitment' ? Object.keys(STATUS_LABELS) : GENERAL_STATUSES;
+                var noteLabel = el('span', {});
+                var note = el('textarea', { rows: 3, maxlength: 2000, placeholder: 'Optional internal note' });
+                var save = el('button', { type: 'submit', class: 'primary', text: 'Save follow-up' });
+                var message = el('p', { class: 'follow-up-message', role: 'status' });
+                var changed = el('p', { class: 'note follow-up-message' });
+                var buttons = statuses.map(function (key) {
+                    var button = el('button', { type: 'button', text: STATUS_LABELS[key] });
+                    button.addEventListener('click', function () {
+                        selected = key;
+                        showSelection();
+                        message.textContent = '';
+                    });
+                    return button;
+                });
+                var form = el('form', { class: 'follow-up-form' }, [
+                    el('div', { class: 'buttons' }, buttons),
+                    el('label', {}, [noteLabel, note]),
+                    el('div', { class: 'buttons' }, [save]),
+                    message, changed
+                ]);
+
+                function savedNote() {
+                    return enquiry.statusNotes[selected] || '';
+                }
+
+                function showSelection() {
+                    buttons.forEach(function (button, index) {
+                        button.setAttribute('aria-pressed', String(statuses[index] === selected));
+                    });
+                    noteLabel.textContent = 'Notes for ' + STATUS_LABELS[selected];
+                    note.value = noteDrafts[selected] ?? savedNote();
+                    save.disabled = selected === enquiry.status && note.value.trim() === savedNote();
+                    changed.textContent = enquiry.statusChangedAt
+                        ? 'Last changed ' + formatTime(enquiry.statusChangedAt) + (enquiry.statusChangedBy ? ' by ' + enquiry.statusChangedBy : '') + '.'
+                        : '';
+                }
+
+                note.addEventListener('input', function () {
+                    noteDrafts[selected] = note.value;
+                    save.disabled = selected === enquiry.status && note.value.trim() === savedNote();
+                    message.textContent = '';
+                });
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    if (save.disabled) return;
+                    save.disabled = note.disabled = true;
+                    buttons.forEach(function (button) { button.disabled = true; });
+                    message.textContent = '';
+                    api('enquiry-status', { method: 'POST', body: {
+                        id: enquiry.id, status: selected, expectedStatus: enquiry.status, note: noteDrafts[selected]
+                    } }).then(function (result) {
+                        note.disabled = false;
+                        buttons.forEach(function (button) { button.disabled = false; });
+                        if (result.ok) {
+                            Object.assign(enquiry, result.data.followUp);
+                            delete noteDrafts[selected];
+                        }
+                        showSelection();
+                        message.className = 'follow-up-message ' + (result.ok ? 'note' : 'error');
+                        message.textContent = result.ok ? 'Follow-up saved.' : (result.data.message || 'The follow-up could not be saved.');
+                    });
+                });
+                showSelection();
+                return el('div', { class: 'card' }, [el('h2', { text: 'Follow-up status' }), form]);
             }
 
             function render(enquiry) {
@@ -477,21 +549,7 @@
                     fields.appendChild(el('dd', { text: enquiry.sourcePage }));
                 }
 
-                var statusMessage = el('p', { class: 'note' });
-                var buttons = el('div', { class: 'buttons' }, Object.keys(STATUS_LABELS).map(function (key) {
-                    var button = el('button', { type: 'button', 'aria-pressed': enquiry.status === key ? 'true' : 'false', text: STATUS_LABELS[key] });
-                    button.addEventListener('click', function () {
-                        api('enquiry-status', { method: 'POST', body: { id: enquiry.id, status: key } }).then(function (result) {
-                            if (result.ok) load();
-                            else statusMessage.textContent = result.data.message || 'The status could not be changed.';
-                        });
-                    });
-                    return button;
-                }));
-                var statusCard = el('div', { class: 'card' }, [el('h2', { text: 'Follow-up status' }), buttons, statusMessage]);
-                if (enquiry.statusChangedAt) {
-                    statusMessage.textContent = 'Last changed ' + formatTime(enquiry.statusChangedAt) + (enquiry.statusChangedBy ? ' by ' + enquiry.statusChangedBy : '') + '.';
-                }
+                var statusCard = followUpCard(enquiry);
 
                 var note = enquiry.notification;
                 var mailCard = el('div', { class: 'card' }, [
