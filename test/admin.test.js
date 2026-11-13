@@ -331,11 +331,15 @@ test('analytics reports stay owner-only and use period totals rather than summin
             type: 'service_account', client_email: 'analytics@example.com', private_key: 'test-only'
         });
         let limited = false;
+        let timedOut = false;
         const request = t.mock.method(JWT.prototype, 'request', async options => {
             assert.equal(options.url, 'https://analyticsdata.googleapis.com/v1beta/properties/123456:batchRunReports');
+            assert.ok(options.timeout > 8110 && options.timeout < 20000);
+            assert.equal(options.retry, false);
             assert.equal(options.data.requests.length, 5);
             assert.ok(options.data.requests.every(report => report.dateRanges[0].endDate === 'yesterday'));
             assert.ok(options.data.requests.every(report => report.dimensionFilter.filter.fieldName === 'hostName'));
+            if (timedOut) throw new DOMException('Request timed out', 'TimeoutError');
             if (limited) {
                 throw Object.assign(new Error('Rate limited'), {
                     response: {
@@ -386,6 +390,12 @@ test('analytics reports stay owner-only and use period totals rather than summin
         assert.equal(refreshed.statusCode, 200);
         assert.equal(refreshed.body.stale, undefined);
         assert.equal(request.mock.callCount(), 3);
+
+        timedOut = true;
+        const timeout = await analytics({ cookie: owner.cookie, query: { days: '30' } });
+        assert.equal(timeout.statusCode, 504);
+        assert.match(timeout.body.message, /Last 7 days/);
+        assert.equal(request.mock.callCount(), 4);
     } finally {
         if (savedProperty === undefined) delete process.env.GA_PROPERTY_ID;
         else process.env.GA_PROPERTY_ID = savedProperty;

@@ -101,6 +101,9 @@ async function route(req, res, name) {
                 return sendError(res, 503, 'Google Analytics is limiting report requests. Wait a few minutes, then try again.');
             }
             console.error('Analytics report could not be loaded', details);
+            if (details.code === 'TimeoutError') {
+                return sendError(res, 504, 'Google Analytics took too long to respond. Try again, or select Last 7 days.');
+            }
             if (status === 401 || status === 403) {
                 return sendError(res, 502, 'Check the GA4 service account, property access, and Data API setup.');
             }
