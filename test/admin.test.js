@@ -660,6 +660,10 @@ test('recruitment resume stays private, survives a failed send, and is attached 
         assert.equal(list.body.showAttachments, true);
         assert.equal(list.body.items.length, query.form ? 2 : 3);
         assert.deepEqual(list.body.items.filter(item => item.hasResume).map(item => item.id), [row.enquiry_id]);
+        // Each applicant shows the position they applied for; other forms have none.
+        assert.ok(list.body.items.filter(item => item.formType === 'recruitment').every(item => item.designation === 'Sales'));
+        assert.ok(list.body.items.filter(item => item.formType !== 'recruitment').every(item => item.designation === null));
+        assert.ok(list.body.items.every(item => item.statusNotes === undefined), 'notes stay on the enquiry itself');
     }
     for (const form of ['contact', 'dealership', 'farming']) {
         const list = await call(admin, { route: 'enquiries', query: { form }, cookie });

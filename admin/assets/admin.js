@@ -47,6 +47,54 @@
         return value ? timeFormat.format(new Date(value)) + ' IST' : '';
     }
 
+    // Compact India-time date and time for tables: "12 Nov 26" and "2:05 pm".
+    var shortDateFormat = new Intl.DateTimeFormat('en-IN', { timeZone: TIME_ZONE, day: 'numeric', month: 'short', year: '2-digit' });
+    var shortTimeFormat = new Intl.DateTimeFormat('en-IN', { timeZone: TIME_ZONE, hour: 'numeric', minute: '2-digit', hour12: true });
+    function shortDate(value) {
+        return shortDateFormat.format(new Date(value));
+    }
+    function shortTime(value) {
+        return shortTimeFormat.format(new Date(value));
+    }
+
+    // A short message at the bottom of the screen that goes away by itself.
+    var toastNode = null;
+    var toastTimer = null;
+    function toast(message) {
+        if (!toastNode) {
+            toastNode = el('div', { class: 'toast', role: 'status', 'aria-live': 'polite' });
+            document.body.appendChild(toastNode);
+        }
+        toastNode.textContent = message;
+        toastNode.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toastNode.classList.remove('show'); }, 2000);
+    }
+
+    function copyText(value, what) {
+        function copied() { toast(what + ' copied'); }
+        function fallback() {
+            var area = el('textarea', { class: 'copy-buffer', readonly: true, 'aria-hidden': 'true' });
+            area.value = value;
+            document.body.appendChild(area);
+            area.select();
+            var ok = false;
+            try { ok = document.execCommand('copy'); } catch (error) { ok = false; }
+            area.remove();
+            if (ok) copied();
+            else toast('Could not copy. Select the text and copy it instead.');
+        }
+        if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(value).then(copied, fallback);
+        else fallback();
+    }
+
+    // Shows a value as a button that copies it when clicked.
+    function copyButton(value, what) {
+        var button = el('button', { type: 'button', class: 'copy', title: 'Click to copy', 'aria-label': value + ', copy ' + what.toLowerCase(), text: value });
+        button.addEventListener('click', function () { copyText(value, what); });
+        return button;
+    }
+
     var dayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
     function today() {
         return dayFormat.format(new Date());
@@ -639,24 +687,28 @@
                     results.appendChild(el('div', { class: 'card' }, [el('p', { class: 'note', text: 'No enquiries match these filters.' })]));
                     return;
                 }
+                openEditor = null; // the previous list, and any editor in it, is gone
                 var body = el('tbody');
-                var headings = ['Submitted', 'Form', 'Name or company', 'Contact', 'Status', 'Email'];
-                if (data.showAttachments) headings.push('Attachments');
+                var headings = ['Submitted', 'Form', 'Name or company', 'Contact', 'Email'];
+                if (data.showAttachments) headings.push('Applied for');
+                headings.push('Status');
                 data.items.forEach(function (item) {
                     var detail = '/admin/enquiries/' + item.id;
                     var emailCell = el('td', { 'data-label': 'Email' }, [badge(item.emailState, EMAIL_LABELS[item.emailState] || item.emailState)]);
                     var cells = [
-                        el('td', { 'data-label': 'Submitted', text: formatTime(item.createdAt) }),
+                        el('td', { 'data-label': 'Submitted', title: formatTime(item.createdAt) }, [shortDate(item.createdAt), el('small', { text: shortTime(item.createdAt) })]),
                         el('td', { 'data-label': 'Form', text: item.formTitle }),
                         el('td', {}, [el('a', { href: detail, text: item.name }), item.company && item.company !== item.name ? el('small', { text: item.company }) : '']),
-                        el('td', { 'data-label': 'Contact' }, [item.email, item.phone ? el('small', { text: item.phone }) : '']),
-                        el('td', { 'data-label': 'Status' }, [badge(item.status, STATUS_LABELS[item.status])]),
+                        el('td', { 'data-label': 'Contact', class: 'contact-cell' }, [
+                            item.phone ? copyButton(item.phone, 'Phone number') : '',
+                            item.email ? copyButton(item.email, 'Email address') : ''
+                        ]),
                         emailCell
                     ];
-                    if (data.showAttachments) {
-                        cells.push(el('td', { 'data-label': 'Attachments' }, item.hasResume ? resumeActions(item.id) : '—'));
-                    }
-                    body.appendChild(el('tr', {}, cells));
+                    if (data.showAttachments) cells.push(appliedForCell(item));
+                    var row = el('tr', {}, cells);
+                    row.appendChild(statusCell(item, row, headings.length));
+                    body.appendChild(row);
                 });
                 results.appendChild(el('table', {}, [
                     el('thead', {}, [el('tr', {}, headings.map(function (heading) { return el('th', { scope: 'col', text: heading }); }))]),
@@ -669,6 +721,132 @@
                 prev.addEventListener('click', function () { page = data.page - 1; load(); });
                 next.addEventListener('click', function () { page = data.page + 1; load(); });
                 results.appendChild(el('div', { class: 'pager' }, [el('span', { class: 'note', text: 'Showing ' + first + '–' + last + ' of ' + data.total }), el('div', { class: 'buttons' }, [prev, next])]));
+            }
+
+            // The position a recruitment applicant applied for, and their résumé.
+            function appliedForCell(item) {
+                if (item.formType !== 'recruitment') return el('td', { 'data-label': 'Applied for', text: '—' });
+                var resume = '/api/admin/enquiry-resume?id=' + encodeURIComponent(item.id) + '&view=1';
+                return el('td', { 'data-label': 'Applied for' }, [
+                    el('span', { class: 'designation', text: item.designation || '—' }),
+                    item.hasResume ? el('a', { href: resume, target: '_blank', rel: 'noopener noreferrer', text: 'View PDF' }) : ''
+                ]);
+            }
+
+            // ---- status and notes without leaving the list ----
+            // Clicking the status opens an editor row under the enquiry. It loads the enquiry's current
+            // status and notes, and saves through the same check as the enquiry page.
+            var openEditor = null;
+
+            function statusCell(item, row, columns) {
+                var trigger = el('button', { type: 'button', class: 'status-trigger', 'aria-expanded': 'false', title: 'Change status or add a note' });
+                function showBadge() {
+                    clear(trigger).appendChild(badge(item.status, (STATUS_LABELS[item.status] || item.status) + ' ▾'));
+                    trigger.setAttribute('aria-label', 'Status: ' + (STATUS_LABELS[item.status] || item.status) + '. Change status or add a note');
+                }
+                showBadge();
+                trigger.addEventListener('click', function () {
+                    var mine = openEditor && openEditor.trigger === trigger;
+                    if (openEditor && !openEditor.close()) return;
+                    if (!mine) statusEditor(item, row, columns, trigger, showBadge);
+                });
+                return el('td', { 'data-label': 'Status', class: 'status-cell' }, [trigger]);
+            }
+
+            function statusEditor(item, row, columns, trigger, showBadge) {
+                var statuses = item.formType === 'recruitment' ? Object.keys(STATUS_LABELS) : GENERAL_STATUSES;
+                var current = null;
+                var drafts = {};
+                var select = el('select', { disabled: true }, statuses.map(function (key) {
+                    return el('option', { value: key, text: STATUS_LABELS[key] });
+                }));
+                var noteLabel = el('span', { text: 'Notes' });
+                var note = el('textarea', { rows: 3, maxlength: 2000, placeholder: 'Optional internal note', disabled: true });
+                var save = el('button', { type: 'submit', class: 'primary', text: 'Save', disabled: true });
+                var cancel = el('button', { type: 'button', text: 'Cancel' });
+                var message = el('p', { class: 'note', role: 'status', text: 'Loading…' });
+                var panel = el('form', { class: 'status-editor', 'aria-label': 'Status and notes for ' + item.name }, [
+                    el('label', {}, ['Status', select]),
+                    el('label', {}, [noteLabel, note]),
+                    el('div', { class: 'buttons' }, [save, cancel]),
+                    message
+                ]);
+                var editorRow = el('tr', { class: 'status-editor-row' }, [el('td', { colspan: columns }, [panel])]);
+                row.after(editorRow);
+                trigger.setAttribute('aria-expanded', 'true');
+                openEditor = { trigger: trigger, close: close };
+
+                function savedNote() {
+                    return current.statusNotes[select.value] || '';
+                }
+                function dirty() {
+                    return Boolean(current) && (select.value !== current.status || note.value.trim() !== savedNote());
+                }
+                function show() {
+                    noteLabel.textContent = 'Notes for ' + STATUS_LABELS[select.value];
+                    note.value = drafts[select.value] ?? savedNote();
+                    save.disabled = !dirty();
+                }
+                // Returns false (and stays open) when there are unsaved changes the owner wants to keep.
+                function close(force) {
+                    if (!force && dirty() && !window.confirm('Discard the unsaved status change or note?')) return false;
+                    editorRow.remove();
+                    trigger.setAttribute('aria-expanded', 'false');
+                    if (openEditor && openEditor.trigger === trigger) openEditor = null;
+                    return true;
+                }
+
+                api('enquiry?id=' + encodeURIComponent(item.id)).then(function (result) {
+                    if (!editorRow.isConnected) return;
+                    if (!result.ok) {
+                        message.className = 'error';
+                        message.textContent = result.data.message || 'This enquiry could not be loaded.';
+                        return;
+                    }
+                    current = { status: result.data.status, statusNotes: result.data.statusNotes || {} };
+                    item.status = current.status;
+                    showBadge();
+                    select.value = current.status;
+                    select.disabled = note.disabled = false;
+                    message.textContent = '';
+                    show();
+                    select.focus();
+                });
+
+                select.addEventListener('change', function () { message.textContent = ''; show(); });
+                note.addEventListener('input', function () {
+                    drafts[select.value] = note.value;
+                    save.disabled = !dirty();
+                    message.textContent = '';
+                });
+                cancel.addEventListener('click', function () { if (close()) trigger.focus(); });
+                panel.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape' && close()) trigger.focus();
+                });
+                panel.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    if (save.disabled) return;
+                    var statusChanged = select.value !== current.status;
+                    select.disabled = note.disabled = save.disabled = cancel.disabled = true;
+                    message.className = 'note';
+                    message.textContent = 'Saving…';
+                    api('enquiry-status', { method: 'POST', body: {
+                        id: item.id, status: select.value, expectedStatus: current.status, note: drafts[select.value]
+                    } }).then(function (result) {
+                        select.disabled = note.disabled = cancel.disabled = false;
+                        if (!result.ok) {
+                            save.disabled = !dirty();
+                            message.className = 'error';
+                            message.textContent = result.data.message || 'The status could not be saved.';
+                            return;
+                        }
+                        item.status = result.data.followUp.status;
+                        showBadge();
+                        close(true);
+                        trigger.focus();
+                        toast(statusChanged ? 'Status changed to ' + STATUS_LABELS[item.status] : 'Note saved');
+                    });
+                });
             }
             load();
         });
