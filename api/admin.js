@@ -104,9 +104,8 @@ async function route(req, res, name) {
             if (details.code === 'TimeoutError') {
                 return sendError(res, 504, 'Google Analytics took too long to respond. Try again, or select Last 7 days.');
             }
-            if (status === 401 || status === 403) {
-                return sendError(res, 502, 'Check the GA4 service account, property access, and Data API setup.');
-            }
+            const setupHelp = analyticsSetupMessage(details);
+            if (setupHelp) return sendError(res, 502, setupHelp, { code: 'analytics_setup' });
             return sendError(res, 502, 'The analytics report could not be loaded. Please try again in a few minutes.');
         }
     }
@@ -196,6 +195,39 @@ async function route(req, res, name) {
     }
 
     return sendError(res, 404, 'Not found.');
+}
+
+// Owner-facing explanations for Google Analytics setup problems. They name the setting to fix and never
+// include the key or any other secret value.
+function analyticsSetupMessage(details) {
+    const { status, code, reason, googleStatus, oauthError } = details;
+    if (code === 'GA4_SETUP') {
+        return {
+            measurement_id_as_property: 'GA_PROPERTY_ID holds the G-… measurement ID. Use the numeric property ID from GA4 Admin → Property details.',
+            property_id_format: 'GA_PROPERTY_ID must be only the numeric GA4 property ID (for example 123456789), without "properties/".',
+            credentials_not_json: 'GA_SERVICE_ACCOUNT_JSON is not valid JSON. Paste the entire contents of the downloaded service account key file.',
+            credentials_not_service_account: 'GA_SERVICE_ACCOUNT_JSON is not a service account key. Create a JSON key for a service account in Google Cloud and paste that file.'
+        }[reason] || null;
+    }
+    if (typeof code === 'string' && /^ERR_OSSL/.test(code)) {
+        return 'The private key inside GA_SERVICE_ACCOUNT_JSON could not be read. Paste the key file again exactly as downloaded.';
+    }
+    if (oauthError === 'invalid_grant' || oauthError === 'unauthorized_client' || oauthError === 'invalid_client') {
+        return 'Google rejected the service account key. It may have been deleted or disabled. Create a new JSON key and update GA_SERVICE_ACCOUNT_JSON.';
+    }
+    if (status === 403 && reason === 'SERVICE_DISABLED') {
+        return 'The Google Analytics Data API is not enabled. Enable it in the Google Cloud project that owns the service account, wait a few minutes, then try again.';
+    }
+    if (status === 403 || status === 401) {
+        return 'The service account cannot read this GA4 property. In GA4 Admin → Property access management, add the service account email as a Viewer.';
+    }
+    if (status === 404 || googleStatus === 'NOT_FOUND') {
+        return 'GA4 could not find the property in GA_PROPERTY_ID. Check the numeric property ID in GA4 Admin → Property details.';
+    }
+    if (status === 400 && googleStatus === 'INVALID_ARGUMENT') {
+        return 'Google Analytics rejected the report request. Check that GA_PROPERTY_ID is a GA4 property (not a Universal Analytics view).';
+    }
+    return null;
 }
 
 function methodNotAllowed(res, allowed) {

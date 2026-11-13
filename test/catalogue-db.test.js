@@ -548,15 +548,34 @@ test('the import creates drafts only, can be run again, and leaves the public si
     assert.equal((await db.query("SELECT draft->>'name' AS name FROM products WHERE product_id = 'janta'")).rows[0].name, 'EDITED');
 });
 
-test('publishing the imported catalogue reproduces the current grids, tabs and links', async t => {
+test('preparing the imported catalogue keeps existing edits and reproduces the public grids, tabs and links', async t => {
     if (!available) return t.skip('no test database');
     const o = await owner();
     await saveDrafts(realImport(), db);
-    for (const row of (await db.query('SELECT id FROM products')).rows) {
-        const res = await o.post('product-publish', { id: row.id });
-        assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+    const { rows } = await db.query("SELECT id, product_id FROM products WHERE product_id IN ('red bull', 'janta')");
+    const ids = Object.fromEntries(rows.map(row => [row.product_id, row.id]));
+    for (const [productId, name] of [['red bull', 'BLACK BULL'], ['janta', 'JANTA DRAFT']]) {
+        const id = ids[productId];
+        const { content, version } = (await o.get('product', { id })).body;
+        const saved = await o.post('product-save', { id, version, content: { ...content, name } });
+        assert.equal(saved.statusCode, 200, JSON.stringify(saved.body));
     }
+    await publishProduct(o, ids['red bull']);
+    const manual = await addProduct(o, 'new manual draft', sample('NEW MANUAL DRAFT'));
+    const flagsBefore = (await db.query('SELECT count(*)::int AS n FROM products WHERE needs_decision')).rows[0].n;
+    assert.equal(await store.publishImportedBaseline(), 105);
+    assert.equal(await store.publishImportedBaseline(), 0);
+    assert.equal(await store.isLive(), false);
+    assert.equal((await listingHtml('nonchemical')).headers['x-catalogue'], 'original');
+    assert.equal((await o.get('product', { id: manual })).body.status, 'draft');
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM products WHERE needs_decision')).rows[0].n, flagsBefore);
+    const janta = (await o.get('product', { id: ids.janta })).body;
+    assert.equal(janta.status, 'published');
+    assert.equal(janta.draft.name, 'JANTA DRAFT');
+    assert.equal(janta.published.name, 'JANTA');
+    assert.equal(janta.revisions[0].action, 'original_version_published');
     await setLive(true);
+    await assert.rejects(store.publishImportedBaseline(), /switched off/);
 
     for (const [pageKey, file] of [['chemicals', 'chemicals.html'], ['nonchemical', 'nonchemical.html']]) {
         const original = parseListing(fs.readFileSync(file, 'utf8'), pageKey);
@@ -595,7 +614,11 @@ test('publishing the imported catalogue reproduces the current grids, tabs and l
 
     // Search data and detail pages now come from the same published records.
     assert.equal((await publicList('chemical')).body.length, 67);
-    assert.equal((await publicList('nonchemical')).body.length, 39);
+    const nonchemical = (await publicList('nonchemical')).body;
+    assert.equal(nonchemical.length, 39);
+    assert.equal(nonchemical.find(product => product.productId === 'red bull').name, 'BLACK BULL');
+    assert.equal((await publicOne('nonchemical', 'red bull')).body.product.name, 'BLACK BULL');
+    assert.match((await listingHtml('nonchemical')).body, /BLACK BULL/);
     const rotomax = (await publicOne('nonchemical', 'rotomax')).body.product;
     assert.equal(rotomax.name, 'ROTOMAX');
     assert.deepEqual(rotomax.aliases, ['Rotomaxx']);
