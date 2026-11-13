@@ -90,9 +90,10 @@ async function route(req, res, name) {
         const session = await authenticate(req, res, { permission: 'accounts' });
         if (!session) return null;
         const days = first(params.days) || '30';
-        if (!['7', '30'].includes(days)) return sendError(res, 400, 'Choose the last 7 or 30 days.');
+        if (!['realtime', '1', '7', '30'].includes(days)) return sendError(res, 400, 'Choose a supported date range.');
+        const realtime = days === 'realtime';
         try {
-            const report = await analytics.trafficReport(Number(days));
+            const report = realtime ? await analytics.realtimeReport() : await analytics.trafficReport(Number(days));
             if (report.notice) {
                 report.notice.message = analyticsWaitMessage(report.notice, Number(days), true);
                 if (report.notice.retryAfter) res.setHeader('Retry-After', String(report.notice.retryAfter));
@@ -108,9 +109,12 @@ async function route(req, res, name) {
                 });
             }
             const details = analytics.failureDetails(error);
-            console.error('Analytics report could not be loaded', details);
+            console.error('Analytics report could not be loaded', { range: days, ...details });
             const setupHelp = analyticsSetupMessage(details);
             if (setupHelp) return sendError(res, 502, setupHelp, { code: 'analytics_setup' });
+            if (realtime && details.code === 'TimeoutError') {
+                return sendError(res, 504, 'Google Analytics did not respond in time. Try again to refresh the last 30 minutes.');
+            }
             return sendError(res, 502, 'The analytics report could not be loaded. Please try again in a few minutes.');
         }
     }
@@ -205,9 +209,9 @@ async function route(req, res, name) {
 // Owner-facing explanations for Google Analytics setup problems. They name the setting to fix and never
 // include the key or any other secret value.
 // Why the report could not be refreshed. The page adds the countdown ("Try again in N s.").
-// The cooldown and the refresh lease are shared by both date ranges, so switching ranges is never suggested.
+// The cooldown and refresh lease are shared across the historical ranges.
 function analyticsWaitMessage({ kind, refreshingDays }, days, hasSavedReport) {
-    const none = ', and there is no saved report for the last ' + days + ' days yet.';
+    const none = ', and there is no saved report for the last ' + days + (days === 1 ? ' day' : ' days') + ' yet.';
     if (kind === 'timeout') {
         return 'Google Analytics did not respond in time' + (hasSavedReport ? ', so this report could not be refreshed.' : none);
     }
@@ -215,7 +219,8 @@ function analyticsWaitMessage({ kind, refreshingDays }, days, hasSavedReport) {
         return 'Google Analytics is limiting report requests' + (hasSavedReport ? ', so this report could not be refreshed.' : none);
     }
     if (kind === 'refreshing') {
-        const running = 'Another Analytics refresh' + (refreshingDays ? ' (last ' + refreshingDays + ' days)' : '') + ' is already running';
+        const running = 'Another Analytics refresh' +
+            (refreshingDays ? ' (last ' + refreshingDays + (refreshingDays === 1 ? ' day)' : ' days)') : '') + ' is already running';
         return running + (hasSavedReport ? ', so this report has not been refreshed yet.' : none);
     }
     return 'Google Analytics could not refresh this report.';

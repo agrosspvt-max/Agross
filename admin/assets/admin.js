@@ -316,10 +316,11 @@
     function analyticsPage() {
         start('analytics', function (main) {
             var days = el('select', {}, [
+                el('option', { value: 'realtime', text: 'Last 30 minutes' }),
+                el('option', { value: '1', text: 'Last 1 day' }),
                 el('option', { value: '7', text: 'Last 7 days' }),
                 el('option', { value: '30', text: 'Last 30 days' })
             ]);
-            days.value = '30';
             var results = el('div', { class: 'stack' });
             var latestLoad = 0;
             var countdown = null;
@@ -362,7 +363,7 @@
                 return !name || name === '(not set)' ? 'Unknown' : name;
             }
 
-            function render(data) {
+            function render(data, range) {
                 clear(results);
                 if (!data.configured) {
                     results.appendChild(el('div', { class: 'card' }, [
@@ -370,19 +371,38 @@
                     ]));
                     return;
                 }
-                results.appendChild(el('div', { class: 'tiles analytics-totals' }, [
+                var realtime = range === 'realtime';
+                var lastDay = range === '1';
+                var shortRange = realtime || lastDay;
+                var tiles = shortRange ? [
+                    tile('Active users', data.totals.activeUsers, 'Distinct active users measured by GA4'),
+                    tile('Page views', data.totals.pageViews, 'Includes repeat page views')
+                ] : [
                     tile('Visitors', data.totals.visitors, 'Distinct visitors measured by GA4'),
                     tile('Visits', data.totals.visits, 'Includes repeat visits')
-                ]));
-                var through = data.stale ? dates.format(new Date(data.daily.at(-1).date + 'T00:00:00Z')) : 'yesterday';
-                results.appendChild(el('p', { class: 'range-note', text: 'Through ' + through +
-                    (data.timeZone ? ' · ' + data.timeZone : '') + ' · Last successful fetch: ' + formatTime(data.fetchedAt) + '.' }));
+                ];
+                results.appendChild(el('div', { class: 'tiles analytics-totals' }, tiles));
+                var period = 'Last 30 minutes';
+                if (lastDay) period = '24 hours ending ' + formatTime(data.windowEnd) + ' · Recent data may still be processing';
+                if (!shortRange) {
+                    var through = data.stale ? dates.format(new Date(data.daily.at(-1).date + 'T00:00:00Z')) : 'yesterday';
+                    period = 'Through ' + through + (data.timeZone ? ' · ' + data.timeZone : '');
+                }
+                var fetched = el('p', { class: 'range-note', text: period + ' · Last successful fetch: ' + formatTime(data.fetchedAt) + '.' });
+                results.appendChild(fetched);
                 if (data.stale) {
                     var notice = data.notice || { message: 'Google Analytics could not refresh this report.' };
                     var again = retryButton();
                     results.appendChild(el('div', { class: 'analytics-notice' }, [
                         waitNote('note', notice.message + ' Showing the last successful report.', notice.retryAfter, again), again
                     ]));
+                }
+                if (shortRange) {
+                    if (!data.totals.activeUsers && !data.totals.pageViews) {
+                        results.appendChild(el('div', { class: 'card', text: 'No traffic has been reported for this time range.' }));
+                    }
+                    if (realtime) results.appendChild(el('div', {}, [retryButton('Refresh')]));
+                    return;
                 }
                 if (!data.totals.visitors && !data.totals.visits) {
                     results.appendChild(el('div', { class: 'card', text: 'No traffic has been reported for this date range.' }));
@@ -414,8 +434,8 @@
                 ]));
             }
 
-            function retryButton() {
-                var button = el('button', { type: 'button', text: 'Try again' });
+            function retryButton(label) {
+                var button = el('button', { type: 'button', text: label || 'Try again' });
                 button.addEventListener('click', load);
                 return button;
             }
@@ -450,13 +470,12 @@
 
             function load() {
                 var request = ++latestLoad;
+                var range = days.value;
                 stopCountdown();
-                days.disabled = true;
                 clear(results).appendChild(el('p', { class: 'note', role: 'status', text: 'Loading traffic…' }));
-                api('analytics?days=' + days.value).then(function (result) {
+                api('analytics?days=' + range).then(function (result) {
                     if (request !== latestLoad) return;
-                    days.disabled = false;
-                    if (result.ok) return render(result.data);
+                    if (result.ok) return render(result.data, range);
                     var message = result.data.message || 'Traffic reports could not be loaded.';
                     if (!result.data.retryAfter) return showError(results, message, load);
                     var again = retryButton();

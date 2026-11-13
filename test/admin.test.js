@@ -311,6 +311,8 @@ test('analytics reports stay owner-only and use period totals rather than summin
     assert.equal((await page(staff.cookie)).statusCode, 403);
     assert.equal((await analytics()).statusCode, 401);
     assert.equal((await analytics({ cookie: staff.cookie })).statusCode, 403);
+    assert.equal((await analytics({ cookie: staff.cookie, query: { days: 'realtime' } })).statusCode, 403);
+    assert.equal((await analytics({ cookie: staff.cookie, query: { days: '1' } })).statusCode, 403);
     assert.match((await page(owner.cookie)).body, /data-page="analytics"/);
     assert.equal((await analytics({ cookie: owner.cookie, query: { days: '90' } })).statusCode, 400);
 
@@ -405,6 +407,43 @@ test('analytics reports stay owner-only and use period totals rather than summin
         assert.match(timeout.body.message, /did not respond in time, and there is no saved report for the last 30 days yet/);
         assert.doesNotMatch(timeout.body.message, /Last 7 days/);
         assert.equal(request.mock.callCount(), 4);
+
+        // Realtime can load during a historical cooldown.
+        request.mock.mockImplementationOnce(async ({ url, data }) => {
+            assert.match(url, /:runRealtimeReport$/);
+            assert.deepEqual(data.metrics.map(metric => metric.name), ['activeUsers', 'screenPageViews']);
+            return { data: { rows: [row([], [1, 10])] } };
+        });
+        const live = await analytics({ cookie: owner.cookie, query: { days: 'realtime' } });
+        assert.equal(live.statusCode, 200);
+        assert.deepEqual(live.body.totals, { activeUsers: 1, pageViews: 10 });
+        assert.deepEqual((await analytics({ cookie: owner.cookie, query: { days: 'realtime' } })).body, live.body);
+        assert.equal(request.mock.callCount(), 5);
+
+        await db.query("UPDATE analytics_cache SET cooldown_until = now() - interval '1 second' WHERE range_days = 0");
+        t.mock.method(Date, 'now', () => Date.parse('2026-11-13T19:04:22Z'));
+        request.mock.mockImplementationOnce(async ({ url, data }) => {
+            assert.match(url, /:runReport$/);
+            assert.deepEqual(data.dateRanges, [{ startDate: '2026-11-13', endDate: '2026-11-14' }]);
+            assert.deepEqual(data.metrics.map(metric => metric.name), ['activeUsers', 'screenPageViews']);
+            assert.equal(data.dimensions, undefined);
+            const [host, time] = data.dimensionFilter.andGroup.expressions;
+            assert.equal(host.filter.fieldName, 'hostName');
+            assert.equal(time.filter.fieldName, 'dateHourMinute');
+            const pattern = new RegExp(time.filter.stringFilter.value);
+            assert.equal(pattern.test('202611130033'), false);
+            assert.equal(pattern.test('202611130034'), true);
+            assert.equal(pattern.test('202611132359'), true);
+            assert.equal(pattern.test('202611140033'), true);
+            assert.equal(pattern.test('202611140034'), false);
+            return { data: { rows: [row([], [4, 16])] } };
+        });
+        const lastDay = await analytics({ cookie: owner.cookie, query: { days: '1' } });
+        assert.equal(lastDay.statusCode, 200);
+        assert.deepEqual(lastDay.body.totals, { activeUsers: 4, pageViews: 16 });
+        assert.equal(lastDay.body.windowEnd, '2026-11-13T19:04:00.000Z');
+        assert.deepEqual((await analytics({ cookie: owner.cookie, query: { days: '1' } })).body, lastDay.body);
+        assert.equal(request.mock.callCount(), 6);
     } finally {
         if (savedProperty === undefined) delete process.env.GA_PROPERTY_ID;
         else process.env.GA_PROPERTY_ID = savedProperty;
