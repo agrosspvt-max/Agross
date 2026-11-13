@@ -18,6 +18,7 @@
     "catalogue:import": "node --env-file-if-exists=.env.local scripts/import-catalogue.js"
   },
   "dependencies": {
+    "google-auth-library": "^11.3.4",
     "pg": "^8.23.1"
   }
 }

@@ -17,6 +17,7 @@ function viewFor(pathname) {
     if (new RegExp('^admin/enquiries/' + UUID + '$', 'i').test(clean)) return { file: 'enquiry.html', permission: 'enquiries' };
     if (clean === 'admin/products') return { file: 'products.html', permission: 'products_edit' };
     if (clean === 'admin/recruiting') return { file: 'recruiting.html', permission: 'recruitment' };
+    if (clean === 'admin/analytics') return { file: 'analytics.html', permission: 'accounts' };
     if (clean === 'admin/products/new' || new RegExp('^admin/products/' + UUID + '$', 'i').test(clean)) return { file: 'product-edit.html', permission: 'products_edit' };
     if (clean === 'admin/login') return { file: 'login.html', public: true };
     if (clean === 'admin/password') return { file: 'password.html', passwordPage: true };

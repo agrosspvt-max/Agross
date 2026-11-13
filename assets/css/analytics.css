@@ -1,0 +1,26 @@
+.analytics-consent {
+    position: fixed;
+    inset: auto auto 1rem 1rem;
+    z-index: 10000;
+    max-width: min(27rem, calc(100% - 2rem));
+    padding: 1rem;
+    border: 1px solid #d6e1dd;
+    border-radius: 10px;
+    box-shadow: 0 4px 24px #172b2926;
+    background: #fff;
+    color: #172b29;
+    font: 15px/1.45 system-ui, sans-serif;
+}
+.analytics-consent[hidden] { display: none; }
+.analytics-consent p { margin: 0 0 .75rem; color: inherit; font: inherit; }
+.analytics-consent div { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.analytics-consent button, [data-analytics-settings] {
+    padding: .45rem .65rem;
+    border: 1px solid #015141;
+    border-radius: 5px;
+    background: #fff;
+    color: #015141;
+    font: inherit;
+    cursor: pointer;
+}
+.analytics-consent a { color: #015141; text-decoration: underline; }

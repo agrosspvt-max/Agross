@@ -8,6 +8,7 @@ const inbox = require('../lib/inbox');
 const notify = require('../lib/notify');
 const adminProducts = require('../lib/admin-products');
 const recruiting = require('../lib/recruiting');
+const analytics = require('../lib/analytics');
 
 const { authenticate, sendError } = auth;
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -82,6 +83,24 @@ async function route(req, res, name) {
         const parsed = inbox.parseFilters({ from: first(params.from), to: first(params.to) });
         if (parsed.error) return sendError(res, 400, parsed.error);
         return res.status(200).json(await inbox.overview(parsed.filters, session.user));
+    }
+
+    if (name === 'analytics') {
+        if (method !== 'GET') return methodNotAllowed(res, 'GET');
+        const session = await authenticate(req, res, { permission: 'accounts' });
+        if (!session) return null;
+        const days = first(params.days) || '30';
+        if (!['7', '30'].includes(days)) return sendError(res, 400, 'Choose the last 7 or 30 days.');
+        try {
+            return res.status(200).json(await analytics.trafficReport(Number(days)));
+        } catch (error) {
+            const status = error.response?.status;
+            console.error('Analytics report could not be loaded', { status });
+            if (status === 401 || status === 403) {
+                return sendError(res, 502, 'Check the GA4 service account, property access, and Data API setup.');
+            }
+            return sendError(res, 502, 'The analytics report could not be loaded. Check the GA4 settings or try again.');
+        }
     }
 
     if (name === 'enquiries') {

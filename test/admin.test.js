@@ -299,6 +299,72 @@ test('someone without enquiry access gets nothing from the pages or the API', as
     assert.equal((await call(adminPage, { query: { p: '' }, cookie: nobody.cookie })).statusCode, 403);
 });
 
+test('analytics reports stay owner-only and use period totals rather than summing daily visitors', async t => {
+    if (!available) return t.skip('no test database');
+    await createUser();
+    await createUser({ username: 'analytics-staff', permissions: ['enquiries'] });
+    const owner = await signIn();
+    const staff = await signIn('analytics-staff');
+    const analytics = options => call(admin, { route: 'analytics', ...options });
+    const page = cookie => call(adminPage, { query: { p: 'analytics' }, cookie });
+    assert.equal((await page()).statusCode, 302);
+    assert.equal((await page(staff.cookie)).statusCode, 403);
+    assert.equal((await analytics()).statusCode, 401);
+    assert.equal((await analytics({ cookie: staff.cookie })).statusCode, 403);
+    assert.match((await page(owner.cookie)).body, /data-page="analytics"/);
+    assert.equal((await analytics({ cookie: owner.cookie, query: { days: '90' } })).statusCode, 400);
+
+    const savedProperty = process.env.GA_PROPERTY_ID;
+    const savedKey = process.env.GA_SERVICE_ACCOUNT_JSON;
+    const { JWT } = require('google-auth-library');
+    const row = (dimensions, metrics) => ({
+        dimensionValues: dimensions.map(value => ({ value })),
+        metricValues: metrics.map(value => ({ value: String(value) }))
+    });
+    const todayInIndia = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const yesterday = new Date(Date.parse(todayInIndia) - 86400000).toISOString().slice(0, 10).replaceAll('-', '');
+    try {
+        delete process.env.GA_PROPERTY_ID;
+        assert.deepEqual((await analytics({ cookie: owner.cookie })).body, { configured: false });
+        process.env.GA_PROPERTY_ID = '123456';
+        process.env.GA_SERVICE_ACCOUNT_JSON = JSON.stringify({
+            type: 'service_account', client_email: 'analytics@example.com', private_key: 'test-only'
+        });
+        const request = t.mock.method(JWT.prototype, 'request', async options => {
+            assert.equal(options.url, 'https://analyticsdata.googleapis.com/v1beta/properties/123456:batchRunReports');
+            assert.equal(options.data.requests.length, 5);
+            assert.ok(options.data.requests.every(report => report.dateRanges[0].endDate === 'yesterday'));
+            assert.ok(options.data.requests.every(report => report.dimensionFilter.filter.fieldName === 'hostName'));
+            return { data: { reports: [
+                { rows: [row([], [3, 6])], metadata: { timeZone: 'Asia/Kolkata' } },
+                { rows: [row([yesterday], [2, 4])] },
+                { rows: [row(['google / organic'], [5])] },
+                { rows: [row(['India'], [3])] },
+                { rows: [row(['India', 'Madhya Pradesh'], [2])] }
+            ] } };
+        });
+        const options = { cookie: owner.cookie, query: { days: '7' } };
+        const result = await analytics(options);
+        assert.equal(result.statusCode, 200);
+        assert.equal(result.headers['cache-control'], 'no-store');
+        assert.deepEqual(result.body.totals, { visitors: 3, visits: 6 });
+        assert.equal(result.body.daily.length, 7);
+        assert.equal(result.body.daily[0].visitors, 0);
+        assert.equal(result.body.daily.at(-1).visits, 4);
+        assert.deepEqual(result.body.sources, [{ source: 'google / organic', visits: 5 }]);
+        assert.deepEqual(result.body.countries, [{ country: 'India', visitors: 3 }]);
+        assert.deepEqual(result.body.regions, [{ country: 'India', region: 'Madhya Pradesh', visitors: 2 }]);
+        assert.deepEqual((await analytics(options)).body, result.body);
+        assert.equal(request.mock.callCount(), 1);
+        assert.doesNotMatch(JSON.stringify(result.body), /test-only|analytics@example\.com/);
+    } finally {
+        if (savedProperty === undefined) delete process.env.GA_PROPERTY_ID;
+        else process.env.GA_PROPERTY_ID = savedProperty;
+        if (savedKey === undefined) delete process.env.GA_SERVICE_ACCOUNT_JSON;
+        else process.env.GA_SERVICE_ACCOUNT_JSON = savedKey;
+    }
+});
+
 test('recruitment records are hidden from everyone without recruitment access, everywhere', async t => {
     if (!available) return t.skip('no test database');
     await createUser({ username: 'staff', permissions: ['enquiries'] });

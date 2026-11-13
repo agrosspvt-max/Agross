@@ -127,6 +127,9 @@
         if (can('recruitment')) {
             links.push(el('a', { href: '/admin/recruiting', 'aria-current': active === 'recruiting' ? 'page' : false, text: 'Recruiting' }));
         }
+        if (can('accounts')) {
+            links.push(el('a', { href: '/admin/analytics', 'aria-current': active === 'analytics' ? 'page' : false, text: 'Analytics' }));
+        }
         var nav = el('nav', {}, links);
         top.appendChild(nav);
         var signOut = el('button', { type: 'button', text: 'Sign out' });
@@ -307,6 +310,110 @@
                 });
             }
             load();
+        });
+    }
+
+    function analyticsPage() {
+        start('analytics', function (main) {
+            var days = el('select', {}, [
+                el('option', { value: '7', text: 'Last 7 days' }),
+                el('option', { value: '30', text: 'Last 30 days' })
+            ]);
+            days.value = '30';
+            var results = el('div', { class: 'stack' });
+            var latestLoad = 0;
+            var numbers = new Intl.NumberFormat('en-IN');
+            var dates = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+            clear(main);
+            main.appendChild(el('h1', { text: 'Analytics' }));
+            main.appendChild(el('div', { class: 'filters' }, [el('label', {}, ['Date range', days])]));
+            main.appendChild(results);
+            days.addEventListener('change', load);
+            load();
+
+            function tile(label, count, hint) {
+                return el('div', { class: 'tile' }, [
+                    el('div', { class: 'label', text: label }),
+                    el('div', { class: 'value', text: numbers.format(count) }),
+                    el('div', { class: 'note', text: hint })
+                ]);
+            }
+
+            function table(title, headings, rows) {
+                var card = el('section', { class: 'card' }, [el('h2', { text: title })]);
+                if (!rows.length) {
+                    card.appendChild(el('p', { class: 'note', text: 'No data for this date range.' }));
+                    return card;
+                }
+                var head = el('tr', {}, headings.map(function (label) {
+                    return el('th', { scope: 'col', text: label });
+                }));
+                var body = rows.map(function (row) {
+                    return el('tr', {}, row.map(function (value, i) {
+                        return el('td', { 'data-label': headings[i], text: value });
+                    }));
+                });
+                card.appendChild(el('table', { 'aria-label': title }, [el('thead', {}, [head]), el('tbody', {}, body)]));
+                return card;
+            }
+
+            function locationName(name) {
+                return !name || name === '(not set)' ? 'Unknown' : name;
+            }
+
+            function render(data) {
+                clear(results);
+                if (!data.configured) {
+                    results.appendChild(el('div', { class: 'card' }, [
+                        el('p', { class: 'note', text: 'Google Analytics setup is pending. Connect the Agross GA4 property to view reports.' })
+                    ]));
+                    return;
+                }
+                results.appendChild(el('div', { class: 'tiles analytics-totals' }, [
+                    tile('Visitors', data.totals.visitors, 'Distinct visitors measured by GA4'),
+                    tile('Visits', data.totals.visits, 'Includes repeat visits')
+                ]));
+                results.appendChild(el('p', { class: 'range-note', text: 'Through yesterday' +
+                    (data.timeZone ? ' · ' + data.timeZone : '') + ' · Last fetched ' + formatTime(data.updatedAt) + '.' }));
+                if (!data.totals.visitors && !data.totals.visits) {
+                    results.appendChild(el('div', { class: 'card', text: 'No traffic has been reported for this date range.' }));
+                    return;
+                }
+                var max = Math.max(1, ...data.daily.map(function (row) { return row.visits; }));
+                var trend = el('section', { class: 'card' }, [el('h2', { text: 'Daily visits' })]);
+                trend.appendChild(el('div', { class: 'analytics-chart', 'aria-hidden': 'true' }, data.daily.map(function (row) {
+                    return el('meter', { min: 0, max: max, value: row.visits, title: row.date + ' · ' + numbers.format(row.visits) + ' visits' });
+                })));
+                trend.appendChild(el('details', { class: 'analytics-daily' }, [
+                    el('summary', { text: 'View daily counts' }),
+                    table('Daily traffic', ['Date', 'Visitors', 'Visits'], data.daily.map(function (row) {
+                        return [dates.format(new Date(row.date + 'T00:00:00Z')), numbers.format(row.visitors), numbers.format(row.visits)];
+                    }))
+                ]));
+                results.appendChild(trend);
+                results.appendChild(table('Traffic sources', ['Source / medium', 'Visits'], data.sources.map(function (row) {
+                    var source = row.source === '(direct) / (none)' ? 'Direct / unknown' : locationName(row.source);
+                    return [source, numbers.format(row.visits)];
+                })));
+                results.appendChild(el('div', { class: 'detail analytics-locations' }, [
+                    table('Top countries', ['Country', 'Visitors'], data.countries.map(function (row) {
+                        return [locationName(row.country), numbers.format(row.visitors)];
+                    })),
+                    table('Top regions', ['Region', 'Country', 'Visitors'], data.regions.map(function (row) {
+                        return [locationName(row.region), locationName(row.country), numbers.format(row.visitors)];
+                    }))
+                ]));
+            }
+
+            function load() {
+                var request = ++latestLoad;
+                clear(results).appendChild(el('p', { class: 'note', role: 'status', text: 'Loading traffic…' }));
+                api('analytics?days=' + days.value).then(function (result) {
+                    if (request !== latestLoad) return;
+                    if (result.ok) render(result.data);
+                    else showError(results, result.data.message || 'Traffic reports could not be loaded.', load);
+                });
+            }
         });
     }
 
@@ -1402,6 +1509,7 @@
     else if (page === 'login') loginPage();
     else if (page === 'password') passwordPage();
     else if (page === 'overview') overviewPage();
+    else if (page === 'analytics') analyticsPage();
     else if (page === 'inbox') inboxPage();
     else if (page === 'enquiry') enquiryPage();
 }());

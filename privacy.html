@@ -61,6 +61,7 @@
         .site-footer { border-top: 1px solid var(--line); background: var(--pale); }
         .footer-inner { padding-block: 1rem; display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; }
     </style>
+    <script defer src="/assets/js/analytics.js"></script>
 </head>
 <body>
     <a class="skip-link" href="#main">Skip to privacy policy</a>
@@ -73,7 +74,7 @@
 
     <main id="main" class="container">
         <h1>Privacy Policy</h1>
-        <p class="updated">Last updated <time datetime="2026-11-05">5 November 2026</time></p>
+        <p class="updated">Last updated <time datetime="2026-11-13">13 November 2026</time></p>
         <p class="intro">Agromaxx Industry operates the Agross website at agross.in, including www.agross.in. This policy explains how we handle personal information when you visit the website or contact us.</p>
 
         <nav class="contents" aria-labelledby="contents-title">
@@ -136,10 +137,13 @@
             <p>Some pages load resources from other providers. Your browser may contact those providers when the resource loads, even if you have not clicked it. Providers may receive your IP address and browser information, and may use cookies or similar browser storage according to their services and your settings.</p>
             <ul>
                 <li><strong>Google Translate, Fonts and Maps.</strong> We use Google services for language translation, typefaces and the map on our contact page. See the <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</li>
+                <li><strong>Google Analytics.</strong> If you allow analytics cookies, we use Google Analytics to measure visits, pages viewed, referral sources and approximate locations. Google Analytics uses cookies to distinguish visitors and visits. Our admin reports show aggregate counts. See <a href="https://policies.google.com/technologies/partner-sites">how Google uses information from partner sites</a>.</li>
                 <li><strong>Other page resources.</strong> Some pages request styles, icons or scripts from content delivery services to display the site and support its features.</li>
                 <li><strong>WhatsApp and other external links.</strong> If you follow a link to WhatsApp, a social network or another website, that service handles your activity under its own privacy terms. We receive the information you choose to send us. See the <a href="https://www.whatsapp.com/legal/privacy-policy">WhatsApp Privacy Policy</a>.</li>
             </ul>
             <p>You can manage or delete cookies in your browser settings and block third-party resources if your browser supports it. Blocking resources can affect features such as translation and the map. If you have questions about website tracking or want to withdraw consent for a particular use, please <a href="#contact">contact us</a>.</p>
+            <button type="button" data-analytics-settings hidden>Change analytics cookie preference</button>
+            <p data-analytics-status role="status"></p>
         </section>
 
         <section aria-labelledby="retention">
