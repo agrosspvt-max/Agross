@@ -322,6 +322,7 @@
             days.value = '30';
             var results = el('div', { class: 'stack' });
             var latestLoad = 0;
+            var countdown = null;
             var numbers = new Intl.NumberFormat('en-IN');
             var dates = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
             clear(main);
@@ -375,9 +376,13 @@
                 ]));
                 var through = data.stale ? dates.format(new Date(data.daily.at(-1).date + 'T00:00:00Z')) : 'yesterday';
                 results.appendChild(el('p', { class: 'range-note', text: 'Through ' + through +
-                    (data.timeZone ? ' · ' + data.timeZone : '') + ' · Last fetched ' + formatTime(data.updatedAt) + '.' }));
+                    (data.timeZone ? ' · ' + data.timeZone : '') + ' · Last successful fetch: ' + formatTime(data.fetchedAt) + '.' }));
                 if (data.stale) {
-                    results.appendChild(el('p', { class: 'note', role: 'status', text: 'Showing the last available report. Google Analytics could not refresh it.' }));
+                    var notice = data.notice || { message: 'Google Analytics could not refresh this report.' };
+                    var again = retryButton();
+                    results.appendChild(el('div', { class: 'analytics-notice' }, [
+                        waitNote('note', notice.message + ' Showing the last successful report.', notice.retryAfter, again), again
+                    ]));
                 }
                 if (!data.totals.visitors && !data.totals.visits) {
                     results.appendChild(el('div', { class: 'card', text: 'No traffic has been reported for this date range.' }));
@@ -409,13 +414,53 @@
                 ]));
             }
 
+            function retryButton() {
+                var button = el('button', { type: 'button', text: 'Try again' });
+                button.addEventListener('click', load);
+                return button;
+            }
+
+            // A message with a live "Try again in N s." countdown from Retry-After. The button stays
+            // disabled until it ends. Nothing reloads by itself: the owner presses Try again.
+            function waitNote(kind, message, seconds, button) {
+                stopCountdown();
+                var left = el('span', { 'aria-live': 'off' });
+                var note = el('p', { class: kind, role: kind === 'error' ? 'alert' : 'status' }, [message + ' ', left]);
+                var until = Date.now() + (seconds || 0) * 1000;
+                function tick() {
+                    var remaining = Math.ceil((until - Date.now()) / 1000);
+                    if (remaining > 0) {
+                        left.textContent = 'Try again in ' + remaining + ' s.';
+                        button.disabled = true;
+                    } else {
+                        stopCountdown();
+                        left.textContent = seconds ? 'You can try again now.' : '';
+                        button.disabled = false;
+                    }
+                }
+                tick();
+                if (seconds > 0) countdown = setInterval(tick, 1000);
+                return note;
+            }
+
+            function stopCountdown() {
+                if (countdown) clearInterval(countdown);
+                countdown = null;
+            }
+
             function load() {
                 var request = ++latestLoad;
+                stopCountdown();
+                days.disabled = true;
                 clear(results).appendChild(el('p', { class: 'note', role: 'status', text: 'Loading traffic…' }));
                 api('analytics?days=' + days.value).then(function (result) {
                     if (request !== latestLoad) return;
-                    if (result.ok) render(result.data);
-                    else showError(results, result.data.message || 'Traffic reports could not be loaded.', load);
+                    days.disabled = false;
+                    if (result.ok) return render(result.data);
+                    var message = result.data.message || 'Traffic reports could not be loaded.';
+                    if (!result.data.retryAfter) return showError(results, message, load);
+                    var again = retryButton();
+                    clear(results).appendChild(el('div', { class: 'card' }, [waitNote('error', message, result.data.retryAfter, again), again]));
                 });
             }
         });

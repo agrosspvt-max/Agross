@@ -332,6 +332,9 @@ test('analytics reports stay owner-only and use period totals rather than summin
         });
         let limited = false;
         let timedOut = false;
+        await db.query(`UPDATE analytics_cache SET report = NULL, fetched_at = NULL, lease_id = NULL, lease_until = NULL,
+                        refreshing_days = NULL, cooldown_until = NULL, cooldown_reason = NULL`);
+        t.mock.method(JWT.prototype, 'getAccessToken', async () => ({ token: 'simulated' }));
         const request = t.mock.method(JWT.prototype, 'request', async options => {
             assert.equal(options.url, 'https://analyticsdata.googleapis.com/v1beta/properties/123456:batchRunReports');
             assert.ok(options.timeout > 8110 && options.timeout < 20000);
@@ -371,20 +374,25 @@ test('analytics reports stay owner-only and use period totals rather than summin
         assert.equal(request.mock.callCount(), 1);
         assert.doesNotMatch(JSON.stringify(result.body), /test-only|analytics@example\.com/);
 
-        let now = Date.now() + 6 * 60 * 1000;
-        t.mock.method(Date, 'now', () => now);
+        // Six minutes later (the saved report is no longer fresh), Google starts limiting requests.
+        await db.query("UPDATE analytics_cache SET fetched_at = fetched_at - interval '6 minutes' WHERE range_days = 7");
         limited = true;
         const lastReport = await analytics(options);
         assert.equal(lastReport.statusCode, 200);
-        assert.deepEqual(lastReport.body, { ...result.body, stale: true });
+        const { notice, ...shown } = lastReport.body;
+        assert.deepEqual(shown, { ...result.body, fetchedAt: shown.fetchedAt, stale: true });
+        assert.equal(notice.kind, 'rate_limit');
+        assert.equal(notice.retryAfter, 120);
+        assert.equal(lastReport.headers['retry-after'], '120');
         const uncached = await analytics({ cookie: owner.cookie, query: { days: '30' } });
         assert.equal(uncached.statusCode, 503);
-        assert.equal(uncached.headers['retry-after'], '120');
+        assert.ok(Number(uncached.headers['retry-after']) > 115);
         assert.match(uncached.body.message, /limiting report requests/);
-        assert.deepEqual((await analytics(options)).body, lastReport.body);
+        assert.equal((await analytics(options)).body.notice.kind, 'rate_limit');
         assert.equal(request.mock.callCount(), 2);
 
-        now += 120 * 1000;
+        // The cooldown ends.
+        await db.query("UPDATE analytics_cache SET cooldown_until = now() - interval '1 second' WHERE range_days = 0");
         limited = false;
         const refreshed = await analytics(options);
         assert.equal(refreshed.statusCode, 200);
@@ -394,7 +402,8 @@ test('analytics reports stay owner-only and use period totals rather than summin
         timedOut = true;
         const timeout = await analytics({ cookie: owner.cookie, query: { days: '30' } });
         assert.equal(timeout.statusCode, 504);
-        assert.match(timeout.body.message, /Last 7 days/);
+        assert.match(timeout.body.message, /did not respond in time, and there is no saved report for the last 30 days yet/);
+        assert.doesNotMatch(timeout.body.message, /Last 7 days/);
         assert.equal(request.mock.callCount(), 4);
     } finally {
         if (savedProperty === undefined) delete process.env.GA_PROPERTY_ID;

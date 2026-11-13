@@ -92,18 +92,23 @@ async function route(req, res, name) {
         const days = first(params.days) || '30';
         if (!['7', '30'].includes(days)) return sendError(res, 400, 'Choose the last 7 or 30 days.');
         try {
-            return res.status(200).json(await analytics.trafficReport(Number(days)));
+            const report = await analytics.trafficReport(Number(days));
+            if (report.notice) {
+                report.notice.message = analyticsWaitMessage(report.notice, Number(days), true);
+                if (report.notice.retryAfter) res.setHeader('Retry-After', String(report.notice.retryAfter));
+                delete report.notice.refreshingDays;
+            }
+            return res.status(200).json(report);
         } catch (error) {
-            const details = analytics.failureDetails(error);
-            const { status } = details;
-            if (status === 429) {
+            if (error.code === 'GA4_UNAVAILABLE') {
+                // Timeout, rate limit or another refresh running, and no saved report to show.
                 res.setHeader('Retry-After', String(error.retryAfter));
-                return sendError(res, 503, 'Google Analytics is limiting report requests. Wait a few minutes, then try again.');
+                return sendError(res, error.kind === 'timeout' ? 504 : 503, analyticsWaitMessage(error, Number(days), false), {
+                    code: 'analytics_' + error.kind, retryAfter: error.retryAfter
+                });
             }
+            const details = analytics.failureDetails(error);
             console.error('Analytics report could not be loaded', details);
-            if (details.code === 'TimeoutError') {
-                return sendError(res, 504, 'Google Analytics took too long to respond. Try again, or select Last 7 days.');
-            }
             const setupHelp = analyticsSetupMessage(details);
             if (setupHelp) return sendError(res, 502, setupHelp, { code: 'analytics_setup' });
             return sendError(res, 502, 'The analytics report could not be loaded. Please try again in a few minutes.');
@@ -199,6 +204,23 @@ async function route(req, res, name) {
 
 // Owner-facing explanations for Google Analytics setup problems. They name the setting to fix and never
 // include the key or any other secret value.
+// Why the report could not be refreshed. The page adds the countdown ("Try again in N s.").
+// The cooldown and the refresh lease are shared by both date ranges, so switching ranges is never suggested.
+function analyticsWaitMessage({ kind, refreshingDays }, days, hasSavedReport) {
+    const none = ', and there is no saved report for the last ' + days + ' days yet.';
+    if (kind === 'timeout') {
+        return 'Google Analytics did not respond in time' + (hasSavedReport ? ', so this report could not be refreshed.' : none);
+    }
+    if (kind === 'rate_limit') {
+        return 'Google Analytics is limiting report requests' + (hasSavedReport ? ', so this report could not be refreshed.' : none);
+    }
+    if (kind === 'refreshing') {
+        const running = 'Another Analytics refresh' + (refreshingDays ? ' (last ' + refreshingDays + ' days)' : '') + ' is already running';
+        return running + (hasSavedReport ? ', so this report has not been refreshed yet.' : none);
+    }
+    return 'Google Analytics could not refresh this report.';
+}
+
 function analyticsSetupMessage(details) {
     const { status, code, reason, googleStatus, oauthError } = details;
     if (code === 'GA4_SETUP') {
