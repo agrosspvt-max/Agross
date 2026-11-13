@@ -94,12 +94,17 @@ async function route(req, res, name) {
         try {
             return res.status(200).json(await analytics.trafficReport(Number(days)));
         } catch (error) {
-            const status = error.response?.status;
-            console.error('Analytics report could not be loaded', { status });
+            const details = analytics.failureDetails(error);
+            const { status } = details;
+            if (status === 429) {
+                res.setHeader('Retry-After', String(error.retryAfter));
+                return sendError(res, 503, 'Google Analytics is limiting report requests. Wait a few minutes, then try again.');
+            }
+            console.error('Analytics report could not be loaded', details);
             if (status === 401 || status === 403) {
                 return sendError(res, 502, 'Check the GA4 service account, property access, and Data API setup.');
             }
-            return sendError(res, 502, 'The analytics report could not be loaded. Check the GA4 settings or try again.');
+            return sendError(res, 502, 'The analytics report could not be loaded. Please try again in a few minutes.');
         }
     }
 

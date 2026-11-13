@@ -330,11 +330,20 @@ test('analytics reports stay owner-only and use period totals rather than summin
         process.env.GA_SERVICE_ACCOUNT_JSON = JSON.stringify({
             type: 'service_account', client_email: 'analytics@example.com', private_key: 'test-only'
         });
+        let limited = false;
         const request = t.mock.method(JWT.prototype, 'request', async options => {
             assert.equal(options.url, 'https://analyticsdata.googleapis.com/v1beta/properties/123456:batchRunReports');
             assert.equal(options.data.requests.length, 5);
             assert.ok(options.data.requests.every(report => report.dateRanges[0].endDate === 'yesterday'));
             assert.ok(options.data.requests.every(report => report.dimensionFilter.filter.fieldName === 'hostName'));
+            if (limited) {
+                throw Object.assign(new Error('Rate limited'), {
+                    response: {
+                        status: 429, headers: new Headers({ 'Retry-After': '120' }),
+                        data: { error: { status: 'RESOURCE_EXHAUSTED' } }
+                    }
+                });
+            }
             return { data: { reports: [
                 { rows: [row([], [3, 6])], metadata: { timeZone: 'Asia/Kolkata' } },
                 { rows: [row([yesterday], [2, 4])] },
@@ -357,6 +366,26 @@ test('analytics reports stay owner-only and use period totals rather than summin
         assert.deepEqual((await analytics(options)).body, result.body);
         assert.equal(request.mock.callCount(), 1);
         assert.doesNotMatch(JSON.stringify(result.body), /test-only|analytics@example\.com/);
+
+        let now = Date.now() + 6 * 60 * 1000;
+        t.mock.method(Date, 'now', () => now);
+        limited = true;
+        const lastReport = await analytics(options);
+        assert.equal(lastReport.statusCode, 200);
+        assert.deepEqual(lastReport.body, { ...result.body, stale: true });
+        const uncached = await analytics({ cookie: owner.cookie, query: { days: '30' } });
+        assert.equal(uncached.statusCode, 503);
+        assert.equal(uncached.headers['retry-after'], '120');
+        assert.match(uncached.body.message, /limiting report requests/);
+        assert.deepEqual((await analytics(options)).body, lastReport.body);
+        assert.equal(request.mock.callCount(), 2);
+
+        now += 120 * 1000;
+        limited = false;
+        const refreshed = await analytics(options);
+        assert.equal(refreshed.statusCode, 200);
+        assert.equal(refreshed.body.stale, undefined);
+        assert.equal(request.mock.callCount(), 3);
     } finally {
         if (savedProperty === undefined) delete process.env.GA_PROPERTY_ID;
         else process.env.GA_PROPERTY_ID = savedProperty;

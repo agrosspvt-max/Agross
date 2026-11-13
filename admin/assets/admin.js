@@ -373,8 +373,12 @@
                     tile('Visitors', data.totals.visitors, 'Distinct visitors measured by GA4'),
                     tile('Visits', data.totals.visits, 'Includes repeat visits')
                 ]));
-                results.appendChild(el('p', { class: 'range-note', text: 'Through yesterday' +
+                var through = data.stale ? dates.format(new Date(data.daily.at(-1).date + 'T00:00:00Z')) : 'yesterday';
+                results.appendChild(el('p', { class: 'range-note', text: 'Through ' + through +
                     (data.timeZone ? ' · ' + data.timeZone : '') + ' · Last fetched ' + formatTime(data.updatedAt) + '.' }));
+                if (data.stale) {
+                    results.appendChild(el('p', { class: 'note', role: 'status', text: 'Showing the last available report. Google Analytics could not refresh it.' }));
+                }
                 if (!data.totals.visitors && !data.totals.visits) {
                     results.appendChild(el('div', { class: 'card', text: 'No traffic has been reported for this date range.' }));
                     return;
