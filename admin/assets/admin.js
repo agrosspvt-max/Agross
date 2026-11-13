@@ -323,14 +323,15 @@
             ]);
             var results = el('div', { class: 'stack' });
             var latestLoad = 0;
-            var countdown = null;
+            // One countdown for the report and one for the page list, so neither stops the other.
+            var countdowns = { report: null, pages: null };
             var numbers = new Intl.NumberFormat('en-IN');
             var dates = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
             clear(main);
             main.appendChild(el('h1', { text: 'Analytics' }));
             main.appendChild(el('div', { class: 'filters' }, [el('label', {}, ['Date range', days])]));
             main.appendChild(results);
-            days.addEventListener('change', load);
+            days.addEventListener('change', function () { load(true); });
             load();
 
             function tile(label, count, hint) {
@@ -363,7 +364,64 @@
                 return !name || name === '(not set)' ? 'Unknown' : name;
             }
 
-            function render(data, range) {
+            function pageViewsTile(data, range, panel) {
+                var count = el('span', { class: 'value', text: data.totals.pageViews == null ? '—' : numbers.format(data.totals.pageViews) });
+                var toggle = el('button', {
+                    type: 'button', class: 'tile analytics-page-views',
+                    'aria-expanded': 'false', 'aria-controls': panel.id
+                }, [
+                    el('span', { class: 'label', text: 'Page views' }),
+                    count,
+                    el('span', { class: 'note', text: 'Includes repeat page views' }),
+                    el('span', { class: 'hint', text: 'View pages' })
+                ]);
+                var hint = toggle.lastElementChild;
+                var url = 'analytics?view=pages&days=' + range;
+                if (range !== 'realtime') {
+                    var end = range === '1' ? data.windowEnd : data.daily.at(-1).date;
+                    url += '&windowEnd=' + encodeURIComponent(end);
+                }
+
+                function loadPages() {
+                    stopCountdown('pages');
+                    clear(panel).appendChild(el('p', { class: 'note', role: 'status', text: 'Loading pages…' }));
+                    api(url).then(function (result) {
+                        if (!panel.isConnected) return;
+                        if (!result.ok || !result.data.pages) {
+                            var message = result.data.message || 'The page breakdown could not be loaded.';
+                            if (!result.data.retryAfter) return showError(panel, message, loadPages);
+                            // Same countdown as the report: Try again stays disabled until Retry-After passes.
+                            var again = el('button', { type: 'button', text: 'Try again' });
+                            again.addEventListener('click', loadPages);
+                            clear(panel).appendChild(el('div', { class: 'card' }, [waitNote('error', message, result.data.retryAfter, again, 'pages'), again]));
+                            return;
+                        }
+                        var report = result.data;
+                        if (data.totals.pageViews == null && report.pageViews != null) count.textContent = numbers.format(report.pageViews);
+                        var card = table('Page views by page', ['Page', 'Active users', 'Views'], report.pages.map(function (row) {
+                            return [locationName(row.page), numbers.format(row.activeUsers), numbers.format(row.pageViews)];
+                        }));
+                        var notes = [];
+                        if (report.rowCount > report.pages.length) notes.push('Showing the ' + report.pages.length + ' most-viewed pages.');
+                        if (range === 'realtime') notes.push('Last 30 minutes as of ' + formatTime(report.fetchedAt) + '.');
+                        if (range === 'realtime' && report.pages.some(function (row) { return row.page === 'Agross'; })) {
+                            notes.push('Views recorded with the shared “Agross” title appear together.');
+                        }
+                        if (notes.length) card.appendChild(el('p', { class: 'note', text: notes.join(' ') }));
+                        clear(panel).appendChild(card);
+                    });
+                }
+
+                toggle.addEventListener('click', function () {
+                    panel.hidden = !panel.hidden;
+                    toggle.setAttribute('aria-expanded', String(!panel.hidden));
+                    hint.textContent = panel.hidden ? 'View pages' : 'Hide pages';
+                    if (!panel.hidden && !panel.firstChild) loadPages();
+                });
+                return toggle;
+            }
+
+            function render(data, range, keepPagesOpen) {
                 clear(results);
                 if (!data.configured) {
                     results.appendChild(el('div', { class: 'card' }, [
@@ -374,14 +432,15 @@
                 var realtime = range === 'realtime';
                 var lastDay = range === '1';
                 var shortRange = realtime || lastDay;
+                var pages = el('div', { id: 'analytics-page-breakdown', class: 'analytics-pages', hidden: true });
+                var pageViews = pageViewsTile(data, range, pages);
                 var tiles = shortRange ? [
-                    tile('Active users', data.totals.activeUsers, 'Distinct active users measured by GA4'),
-                    tile('Page views', data.totals.pageViews, 'Includes repeat page views')
+                    tile('Active users', data.totals.activeUsers, 'Distinct active users measured by GA4')
                 ] : [
                     tile('Visitors', data.totals.visitors, 'Distinct visitors measured by GA4'),
                     tile('Visits', data.totals.visits, 'Includes repeat visits')
                 ];
-                results.appendChild(el('div', { class: 'tiles analytics-totals' }, tiles));
+                results.appendChild(el('div', { class: 'tiles analytics-totals' }, [...tiles, pageViews]));
                 var period = 'Last 30 minutes';
                 if (lastDay) period = '24 hours ending ' + formatTime(data.windowEnd) + ' · Recent data may still be processing';
                 if (!shortRange) {
@@ -390,6 +449,8 @@
                 }
                 var fetched = el('p', { class: 'range-note', text: period + ' · Last successful fetch: ' + formatTime(data.fetchedAt) + '.' });
                 results.appendChild(fetched);
+                results.appendChild(pages);
+                if (keepPagesOpen) pageViews.click();
                 if (data.stale) {
                     var notice = data.notice || { message: 'Google Analytics could not refresh this report.' };
                     var again = retryButton();
@@ -404,7 +465,7 @@
                     if (realtime) results.appendChild(el('div', {}, [retryButton('Refresh')]));
                     return;
                 }
-                if (!data.totals.visitors && !data.totals.visits) {
+                if (!data.totals.visitors && !data.totals.visits && !data.totals.pageViews) {
                     results.appendChild(el('div', { class: 'card', text: 'No traffic has been reported for this date range.' }));
                     return;
                 }
@@ -436,14 +497,15 @@
 
             function retryButton(label) {
                 var button = el('button', { type: 'button', text: label || 'Try again' });
-                button.addEventListener('click', load);
+                button.addEventListener('click', function () { load(true); });
                 return button;
             }
 
             // A message with a live "Try again in N s." countdown from Retry-After. The button stays
             // disabled until it ends. Nothing reloads by itself: the owner presses Try again.
-            function waitNote(kind, message, seconds, button) {
-                stopCountdown();
+            function waitNote(kind, message, seconds, button, name) {
+                name = name || 'report';
+                stopCountdown(name);
                 var left = el('span', { 'aria-live': 'off' });
                 var note = el('p', { class: kind, role: kind === 'error' ? 'alert' : 'status' }, [message + ' ', left]);
                 var until = Date.now() + (seconds || 0) * 1000;
@@ -453,29 +515,31 @@
                         left.textContent = 'Try again in ' + remaining + ' s.';
                         button.disabled = true;
                     } else {
-                        stopCountdown();
+                        stopCountdown(name);
                         left.textContent = seconds ? 'You can try again now.' : '';
                         button.disabled = false;
                     }
                 }
                 tick();
-                if (seconds > 0) countdown = setInterval(tick, 1000);
+                if (seconds > 0) countdowns[name] = setInterval(tick, 1000);
                 return note;
             }
 
-            function stopCountdown() {
-                if (countdown) clearInterval(countdown);
-                countdown = null;
+            function stopCountdown(name) {
+                if (countdowns[name]) clearInterval(countdowns[name]);
+                countdowns[name] = null;
             }
 
-            function load() {
+            function load(preserveBreakdown) {
                 var request = ++latestLoad;
                 var range = days.value;
-                stopCountdown();
+                var keepPagesOpen = preserveBreakdown === true && results.querySelector('.analytics-page-views[aria-expanded="true"]');
+                stopCountdown('report');
+                stopCountdown('pages');
                 clear(results).appendChild(el('p', { class: 'note', role: 'status', text: 'Loading traffic…' }));
                 api('analytics?days=' + range).then(function (result) {
                     if (request !== latestLoad) return;
-                    if (result.ok) return render(result.data, range);
+                    if (result.ok) return render(result.data, range, keepPagesOpen);
                     var message = result.data.message || 'Traffic reports could not be loaded.';
                     if (!result.data.retryAfter) return showError(results, message, load);
                     var again = retryButton();

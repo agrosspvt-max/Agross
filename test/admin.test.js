@@ -312,6 +312,7 @@ test('analytics reports stay owner-only and use period totals rather than summin
     assert.equal((await analytics()).statusCode, 401);
     assert.equal((await analytics({ cookie: staff.cookie })).statusCode, 403);
     assert.equal((await analytics({ cookie: staff.cookie, query: { days: 'realtime' } })).statusCode, 403);
+    assert.equal((await analytics({ cookie: staff.cookie, query: { days: 'realtime', view: 'pages' } })).statusCode, 403);
     assert.equal((await analytics({ cookie: staff.cookie, query: { days: '1' } })).statusCode, 403);
     assert.match((await page(owner.cookie)).body, /data-page="analytics"/);
     assert.equal((await analytics({ cookie: owner.cookie, query: { days: '90' } })).statusCode, 400);
@@ -342,6 +343,7 @@ test('analytics reports stay owner-only and use period totals rather than summin
             assert.ok(options.timeout > 8110 && options.timeout < 20000);
             assert.equal(options.retry, false);
             assert.equal(options.data.requests.length, 5);
+            assert.deepEqual(options.data.requests[0].metrics.map(metric => metric.name), ['totalUsers', 'sessions', 'screenPageViews']);
             assert.ok(options.data.requests.every(report => report.dateRanges[0].endDate === 'yesterday'));
             assert.ok(options.data.requests.every(report => report.dimensionFilter.filter.fieldName === 'hostName'));
             if (timedOut) throw new DOMException('Request timed out', 'TimeoutError');
@@ -354,7 +356,7 @@ test('analytics reports stay owner-only and use period totals rather than summin
                 });
             }
             return { data: { reports: [
-                { rows: [row([], [3, 6])], metadata: { timeZone: 'Asia/Kolkata' } },
+                { rows: [row([], [3, 6, 18])], metadata: { timeZone: 'Asia/Kolkata' } },
                 { rows: [row([yesterday], [2, 4])] },
                 { rows: [row(['google / organic'], [5])] },
                 { rows: [row(['India'], [3])] },
@@ -365,7 +367,7 @@ test('analytics reports stay owner-only and use period totals rather than summin
         const result = await analytics(options);
         assert.equal(result.statusCode, 200);
         assert.equal(result.headers['cache-control'], 'no-store');
-        assert.deepEqual(result.body.totals, { visitors: 3, visits: 6 });
+        assert.deepEqual(result.body.totals, { visitors: 3, visits: 6, pageViews: 18 });
         assert.equal(result.body.daily.length, 7);
         assert.equal(result.body.daily[0].visitors, 0);
         assert.equal(result.body.daily.at(-1).visits, 4);
@@ -420,8 +422,28 @@ test('analytics reports stay owner-only and use period totals rather than summin
         assert.deepEqual((await analytics({ cookie: owner.cookie, query: { days: 'realtime' } })).body, live.body);
         assert.equal(request.mock.callCount(), 5);
 
+        const livePagesOptions = { cookie: owner.cookie, query: { days: 'realtime', view: 'pages' } };
+        request.mock.mockImplementationOnce(async ({ url, data }) => {
+            assert.match(url, /:runRealtimeReport$/);
+            assert.deepEqual(data.dimensions, [{ name: 'unifiedScreenName' }]);
+            assert.deepEqual(data.orderBys, [{ metric: { metricName: 'screenPageViews' }, desc: true }]);
+            assert.equal(data.metricFilter.filter.fieldName, 'screenPageViews');
+            assert.equal(data.dimensionFilter.filter.stringFilter.value, 'web');
+            return { data: { rowCount: 2, rows: [row(['/index.html'], [1, 7]), row(['/chemicals.html'], [1, 3])] } };
+        });
+        const livePages = await analytics(livePagesOptions);
+        assert.equal(livePages.statusCode, 200);
+        assert.equal(livePages.headers['cache-control'], 'no-store');
+        assert.deepEqual(livePages.body.pages, [
+            { page: '/index.html', activeUsers: 1, pageViews: 7 },
+            { page: '/chemicals.html', activeUsers: 1, pageViews: 3 }
+        ]);
+        assert.deepEqual((await analytics(livePagesOptions)).body, livePages.body);
+        assert.equal(request.mock.callCount(), 6);
+
         await db.query("UPDATE analytics_cache SET cooldown_until = now() - interval '1 second' WHERE range_days = 0");
         t.mock.method(Date, 'now', () => Date.parse('2026-11-13T19:04:22Z'));
+        let timeFilter;
         request.mock.mockImplementationOnce(async ({ url, data }) => {
             assert.match(url, /:runReport$/);
             assert.deepEqual(data.dateRanges, [{ startDate: '2026-11-13', endDate: '2026-11-14' }]);
@@ -430,6 +452,7 @@ test('analytics reports stay owner-only and use period totals rather than summin
             const [host, time] = data.dimensionFilter.andGroup.expressions;
             assert.equal(host.filter.fieldName, 'hostName');
             assert.equal(time.filter.fieldName, 'dateHourMinute');
+            timeFilter = data.dimensionFilter;
             const pattern = new RegExp(time.filter.stringFilter.value);
             assert.equal(pattern.test('202611130033'), false);
             assert.equal(pattern.test('202611130034'), true);
@@ -443,7 +466,46 @@ test('analytics reports stay owner-only and use period totals rather than summin
         assert.deepEqual(lastDay.body.totals, { activeUsers: 4, pageViews: 16 });
         assert.equal(lastDay.body.windowEnd, '2026-11-13T19:04:00.000Z');
         assert.deepEqual((await analytics({ cookie: owner.cookie, query: { days: '1' } })).body, lastDay.body);
-        assert.equal(request.mock.callCount(), 6);
+        assert.equal(request.mock.callCount(), 7);
+
+        const dayPagesOptions = { cookie: owner.cookie, query: { days: '1', view: 'pages', windowEnd: lastDay.body.windowEnd } };
+        assert.equal((await analytics({ ...dayPagesOptions, query: { ...dayPagesOptions.query, windowEnd: 'invalid' } })).statusCode, 400);
+        request.mock.mockImplementationOnce(async ({ url, data }) => {
+            assert.match(url, /:runReport$/);
+            assert.deepEqual(data.dimensions, [{ name: 'pagePath' }]);
+            assert.deepEqual(data.dimensionFilter, timeFilter);
+            return { data: { rows: [row(['/chemicals.html'], [3, 16])] } };
+        });
+        const dayPages = await analytics(dayPagesOptions);
+        assert.equal(dayPages.statusCode, 200);
+        assert.deepEqual(dayPages.body.pages, [{ page: '/chemicals.html', activeUsers: 3, pageViews: 16 }]);
+        assert.equal(dayPages.body.rowCount, 1);
+
+        for (const [days, startDate] of [['7', '2026-11-07'], ['30', '2026-10-15']]) {
+            request.mock.mockImplementationOnce(async ({ url, data }) => {
+                assert.match(url, /:runReport$/);
+                assert.deepEqual(data.dimensions, [{ name: 'pagePath' }]);
+                assert.deepEqual(data.dateRanges, [{ startDate, endDate: '2026-11-13' }]);
+                assert.equal(data.dimensionFilter.filter.fieldName, 'hostName');
+                assert.deepEqual(data.metricAggregations, ['TOTAL']);
+                return { data: { rowCount: 27, rows: [row(['/index.html'], [4, 8])], totals: [row([], [9, 70])] } };
+            });
+            const history = await analytics({ cookie: owner.cookie, query: { days, view: 'pages', windowEnd: '2026-11-13' } });
+            assert.equal(history.statusCode, 200);
+            assert.deepEqual(history.body.pages, [{ page: '/index.html', activeUsers: 4, pageViews: 8 }]);
+            assert.equal(history.body.pageViews, 70);
+            assert.equal(history.body.rowCount, 27);
+        }
+
+        request.mock.mockImplementationOnce(async () => { throw new DOMException('Request timed out', 'TimeoutError'); });
+        const dayPagesTimeout = await analytics(dayPagesOptions);
+        assert.equal(dayPagesTimeout.statusCode, 504);
+        assert.equal(dayPagesTimeout.body.retryAfter, 60);
+        const dayPagesCooldown = await analytics(dayPagesOptions);
+        assert.equal(dayPagesCooldown.statusCode, 504);
+        assert.ok(dayPagesCooldown.body.retryAfter > 0);
+        assert.deepEqual((await analytics({ cookie: owner.cookie, query: { days: '1' } })).body, lastDay.body);
+        assert.equal(request.mock.callCount(), 11);
     } finally {
         if (savedProperty === undefined) delete process.env.GA_PROPERTY_ID;
         else process.env.GA_PROPERTY_ID = savedProperty;

@@ -38,6 +38,8 @@
             allow_google_signals: false,
             allow_ad_personalization_signals: false,
             page_location: pageLocation.href,
+            // Realtime reporting groups web pages by title. Use the path to distinguish pages with the same title.
+            page_title: pageLocation.pathname.slice(0, 300),
             page_referrer: pageReferrer
         });
         gtag('event', 'page_view', { send_to: measurementId });

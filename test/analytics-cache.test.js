@@ -85,7 +85,7 @@ function hold() {
 
 // A valid GA4 batch answer; `visitors` makes each report recognisable.
 function gaAnswer(visitors) {
-    const rows = visitors ? [{ metricValues: [{ value: String(visitors) }, { value: String(visitors * 2) }] }] : [];
+    const rows = visitors ? [{ metricValues: [visitors, visitors * 2, visitors * 3].map(value => ({ value: String(value) })) }] : [];
     return {
         data: {
             reports: [
@@ -368,7 +368,7 @@ test('a fresh report keeps both ranges and every metric', async t => {
     for (const days of [7, 30]) {
         const res = await load(instance(), days);
         assert.equal(res.statusCode, 200);
-        assert.deepEqual(res.body.totals, { visitors: 15, visits: 30 });
+        assert.deepEqual(res.body.totals, { visitors: 15, visits: 30, pageViews: 45 });
         assert.equal(res.body.daily.length, days);
         assert.deepEqual(res.body.sources, [{ source: 'google / organic', visits: 15 }]);
         assert.deepEqual(res.body.countries, [{ country: 'India', visitors: 15 }]);
@@ -385,9 +385,9 @@ test('a valid report with no traffic is saved like any other', async t => {
     google.answer = () => Promise.resolve(gaAnswer(0));
     const res = await load(instance(), 7);
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.body.totals, { visitors: 0, visits: 0 });
+    assert.deepEqual(res.body.totals, { visitors: 0, visits: 0, pageViews: 0 });
     assert.ok(res.body.daily.every(day => day.visitors === 0 && day.visits === 0));
-    assert.deepEqual((await saved(7)).report.totals, { visitors: 0, visits: 0 });
+    assert.deepEqual((await saved(7)).report.totals, { visitors: 0, visits: 0, pageViews: 0 });
     await load(instance(), 7);
     assert.equal(google.calls.length, 1, 'the saved empty report is reused');
 });
@@ -494,4 +494,50 @@ test('another temporary Google error shows the saved report without a cooldown',
     const state = await shared();
     assert.equal(state.cooldown_left, null);
     assert.equal(state.lease_id, null);
+});
+
+// ---- the page list behind the Page views tile ------------------------------------------------
+
+async function loadPages(copy, days, windowEnd) {
+    const res = response();
+    await copy.handler({ method: 'GET', headers: {}, query: { route: 'analytics', view: 'pages', days: String(days), windowEnd }, url: '/' }, res);
+    return res;
+}
+
+function yesterdayInIndia() {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    return new Date(Date.parse(today) - 86400000).toISOString().slice(0, 10);
+}
+
+test('the page list says why it must wait, with the countdown, during a shared cooldown', async t => {
+    if (skip(t)) return;
+    for (const [reason, status, message] of [
+        ['timeout', 504, 'Google Analytics did not respond in time, so the page list could not be loaded.'],
+        ['rate_limit', 503, 'Google Analytics is limiting report requests, so the page list could not be loaded.']
+    ]) {
+        await db.query("UPDATE analytics_cache SET cooldown_until = now() + interval '40 seconds', cooldown_reason = $1 WHERE range_days = 0", [reason]);
+        for (const days of [7, 30]) {
+            const res = await loadPages(instance(), days, yesterdayInIndia());
+            assert.equal(res.statusCode, status);
+            assert.equal(res.body.message, message);
+            assert.equal(res.body.code, 'analytics_' + reason);
+            assert.ok(res.body.retryAfter > 35 && res.body.retryAfter <= 40);
+            assert.equal(res.headers['retry-after'], String(res.body.retryAfter));
+        }
+    }
+    assert.equal(google.calls.length, 0, 'no Google call during the cooldown');
+});
+
+test('the page list waits for a refresh that is already running', async t => {
+    if (skip(t)) return;
+    const copy = instance();
+    const refresh = load(copy, 30);
+    await until(() => google.calls.length === 1, 'the 30-day refresh');
+    const res = await loadPages(instance(), 7, yesterdayInIndia());
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.body.code, 'analytics_refreshing');
+    assert.equal(res.body.message, 'Another Analytics refresh (last 30 days) is already running, so the page list could not be loaded yet.');
+    assert.ok(res.body.retryAfter >= 1 && res.body.retryAfter <= 25);
+    google.calls[0].settle.resolve(gaAnswer(5));
+    await refresh;
 });

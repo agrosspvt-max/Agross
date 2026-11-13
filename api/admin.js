@@ -92,7 +92,9 @@ async function route(req, res, name) {
         const days = first(params.days) || '30';
         if (!['realtime', '1', '7', '30'].includes(days)) return sendError(res, 400, 'Choose a supported date range.');
         const realtime = days === 'realtime';
+        const pages = first(params.view) === 'pages';
         try {
+            if (pages) return res.status(200).json(await analytics.pageViewsReport(days, first(params.windowEnd)));
             const report = realtime ? await analytics.realtimeReport() : await analytics.trafficReport(Number(days));
             if (report.notice) {
                 report.notice.message = analyticsWaitMessage(report.notice, Number(days), true);
@@ -101,17 +103,20 @@ async function route(req, res, name) {
             }
             return res.status(200).json(report);
         } catch (error) {
+            if (error.code === 'GA4_PAGES_WINDOW') return sendError(res, 400, 'Reload Analytics to get a current report for this date range.');
             if (error.code === 'GA4_UNAVAILABLE') {
                 // Timeout, rate limit or another refresh running, and no saved report to show.
                 res.setHeader('Retry-After', String(error.retryAfter));
-                return sendError(res, error.kind === 'timeout' ? 504 : 503, analyticsWaitMessage(error, Number(days), false), {
+                const message = pages ? analyticsPagesWaitMessage(error) : analyticsWaitMessage(error, Number(days), false);
+                return sendError(res, error.kind === 'timeout' ? 504 : 503, message, {
                     code: 'analytics_' + error.kind, retryAfter: error.retryAfter
                 });
             }
             const details = analytics.failureDetails(error);
-            console.error('Analytics report could not be loaded', { range: days, ...details });
+            console.error('Analytics report could not be loaded', { range: days, view: pages ? 'pages' : 'summary', ...details });
             const setupHelp = analyticsSetupMessage(details);
             if (setupHelp) return sendError(res, 502, setupHelp, { code: 'analytics_setup' });
+            if (pages) return sendError(res, details.code === 'TimeoutError' ? 504 : 502, 'The page breakdown could not be loaded. Please try again.');
             if (realtime && details.code === 'TimeoutError') {
                 return sendError(res, 504, 'Google Analytics did not respond in time. Try again to refresh the last 30 minutes.');
             }
@@ -224,6 +229,14 @@ function analyticsWaitMessage({ kind, refreshingDays }, days, hasSavedReport) {
         return running + (hasSavedReport ? ', so this report has not been refreshed yet.' : none);
     }
     return 'Google Analytics could not refresh this report.';
+}
+
+// Why the page list behind the Page views tile could not be loaded. The page adds the countdown.
+function analyticsPagesWaitMessage({ kind, refreshingDays }) {
+    if (kind === 'timeout') return 'Google Analytics did not respond in time, so the page list could not be loaded.';
+    if (kind === 'rate_limit') return 'Google Analytics is limiting report requests, so the page list could not be loaded.';
+    const range = refreshingDays ? ' (last ' + refreshingDays + (refreshingDays === 1 ? ' day)' : ' days)') : '';
+    return 'Another Analytics refresh' + range + ' is already running, so the page list could not be loaded yet.';
 }
 
 function analyticsSetupMessage(details) {
