@@ -138,6 +138,7 @@ dl.fields dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .grid-form .wide { grid-column: 1 / -1; }
 textarea { font: inherit; padding: .45rem .6rem; border: 1px solid #c4ccd6; border-radius: 8px; width: 100%; margin-top: .2rem; resize: vertical; color: var(--ink); }
 .field-error { display: block; color: var(--red); font-size: .8rem; margin-top: .15rem; }
+.position-hint { display: block; font-size: .85rem; font-weight: normal; margin-top: .3rem; line-height: 1.4; }
 .messages .ok { color: #17653f; margin: .5rem 0; }
 .messages .error { margin: .5rem 0; }
 .sticky { position: sticky; bottom: 0; background: var(--bg); padding: .75rem 0; border-top: 1px solid var(--line); margin-top: 1rem; z-index: 5; }

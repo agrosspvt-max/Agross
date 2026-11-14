@@ -1190,6 +1190,7 @@
             main.appendChild(el('a', { class: 'back', href: '/admin/products', text: '← Back to products' }));
             main.appendChild(holder);
             var tabs = [];
+            var gridInfo = { grid: null, current: null, requested: null, counts: {}, live: false };   // positions for a new product
             var product = null;       // the record from the server (null while adding)
             var imageState = { image: null, image_id: null };
             var dirty = false;
@@ -1204,6 +1205,7 @@
             api('product-facets').then(function (facets) {
                 if (!facets.ok) { showError(holder, facets.data.message || 'The page could not be loaded.'); return; }
                 tabs = facets.data.tabs;
+                gridInfo = { grid: null, current: null, requested: null, counts: facets.data.gridCounts || {}, live: facets.data.live };
                 if (isNew) { build(null); return; }
                 reload();
             });
@@ -1237,7 +1239,7 @@
 
             function fill(content) {
                 content = content || {};
-                ['name', 'category', 'subcategory', 'type', 'description', 'technical', 'benefits', 'tags', 'image_alt', 'display_order']
+                ['name', 'category', 'subcategory', 'type', 'description', 'technical', 'benefits', 'tags', 'image_alt']
                     .concat(TEXT_INPUTS.map(function (pair) { return pair[0]; })).forEach(function (name) { setValue(name, content[name]); });
                 setValue('aliases', (content.aliases || []).join('\n'));
                 fields.listing_page.value = content.listing_page || '';
@@ -1258,10 +1260,103 @@
                 fields.listing_tab.disabled = !page;
             }
 
+            // ---- position in the grid -------------------------------------------------------------
+            // The field holds the place asked for in "All" of the chosen grid (the same order is used, filtered,
+            // in every category tab). It shows the live place and any requested move saved in the draft.
+            var positionInfo = gridInfo;
+            var positionHint = el('span', { class: 'note position-hint', id: 'position-hint' });
+
+            function positionField() {
+                var wrap = input('position', 'Position in All products', {
+                    attrs: { type: 'number', min: '1', step: '1', inputmode: 'numeric', 'aria-describedby': 'position-hint' }
+                });
+                wrap.appendChild(positionHint);
+                fields.position.addEventListener('input', showPosition);
+                return wrap;
+            }
+
+            function fillPosition(info) {
+                positionInfo = info || gridInfo;
+                var shown = positionInfo.requested || positionInfo.current;
+                fields.position.value = shown ? String(shown) : '';
+                showPosition();
+            }
+
+            // The positions this product may ask for in the chosen grid: 1..N if it is live there, 1..N+1 if it would join.
+            function positionRange(page) {
+                var count = positionInfo.counts[page] || 0;
+                return positionInfo.grid === page ? count : count + 1;
+            }
+
+            function showPosition() {
+                var page = fields.listing_page.value;
+                var field = fields.position;
+                var error = document.querySelector('[data-error-for="position"]');
+                var lines = [];
+                field.disabled = !page;
+                if (!page) {
+                    field.value = '';
+                    lines.push('Not listed in a grid, so it has no position.');
+                } else {
+                    var max = positionRange(page);
+                    var title = LISTING_LABELS[page];
+                    field.max = String(max);
+                    lines.push(max === 1 ? 'Only position 1 is available in the ' + title + '.' : 'From 1 to ' + max + ' in the ' + title + '.');
+                    if (positionInfo.grid === page) lines.push('Live now at #' + positionInfo.current + '.');
+                    else if (positionInfo.grid) lines.push('Live now at #' + positionInfo.current + ' in the ' + LISTING_LABELS[positionInfo.grid] + '. Publishing moves it to the ' + title + '.');
+                    if (positionInfo.grid !== page) lines.push('Leave blank to add it at the end (#' + max + ').');
+                    if (positionInfo.requested && positionInfo.requested !== positionInfo.current) {
+                        lines.push('Requested in the draft: #' + positionInfo.requested + '. It is applied when you publish.');
+                    }
+                    if (!positionInfo.live) lines.push('The public site is showing the original pages, so positions take effect once the managed catalogue is switched on.');
+                    var value = field.value.trim();
+                    var bad = value !== '' && (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > max);
+                    if (error) {
+                        error.textContent = bad ? 'Enter a whole number from 1 to ' + max + '.' : '';
+                        error.hidden = !bad;
+                    }
+                }
+                positionHint.textContent = lines.join(' ');
+            }
+
+            // Shows what publishing changes in the grid, asks to confirm, then publishes with the confirmed
+            // positions. If another admin changed the order meanwhile, the server refuses and the new moves are shown.
+            function publishWithPositions() {
+                api('product-publish-preview?id=' + encodeURIComponent(product.id)).then(function (result) {
+                    if (!result.ok) { say(result.data.message || 'The positions could not be checked.', true); return; }
+                    if (result.data.error) {
+                        validation = { errors: Object.assign({}, validation.errors, { position: result.data.error }), warnings: validation.warnings };
+                        showValidation();
+                        say(result.data.error, true);
+                        return;
+                    }
+                    confirmPublish(result.data, 'Publish this version to the public catalogue?');
+                });
+            }
+
+            function confirmPublish(plan, question) {
+                var lines = plan.lines || [];
+                if (!window.confirm(question + (lines.length ? '\n\n' + lines.join('\n') : ''))) return;
+                api('product-publish', { method: 'POST', body: { id: product.id, positionToken: plan.token } }).then(function (result) {
+                    if (!result.ok) {
+                        if (result.status === 409 && result.data.code === 'positions_changed') {
+                            confirmPublish(result.data.positions, 'The order of the grid changed after the positions were shown. Review the updated positions, then publish?');
+                            return;
+                        }
+                        if (result.data.errors) { validation = { errors: result.data.errors, warnings: validation.warnings }; showValidation(); }
+                        say(result.data.message || 'That could not be done.', true);
+                        return;
+                    }
+                    var done = (result.data.positions && result.data.positions.lines) || [];
+                    dirty = false;
+                    reload();
+                    window.setTimeout(function () { say(['Published. Visitors see this version.'].concat(done).join(' ')); }, 400);
+                });
+            }
+
             function collect() {
                 var content = {
                     listing_page: fields.listing_page.value || null, listing_tab: fields.listing_tab.value || null,
-                    display_order: fields.display_order.value === '' ? null : Number(fields.display_order.value),
                     aliases: fields.aliases.value.split('\n'), image: imageState.image, image_id: imageState.image_id
                 };
                 ['name', 'category', 'subcategory', 'type', 'description', 'technical', 'benefits', 'tags', 'image_alt']
@@ -1331,18 +1426,28 @@
 
             function save(thenDo) {
                 var content = collect();
+                var position = fields.position.disabled ? null : fields.position.value.trim();
                 var request = isNew && !product
-                    ? api('product-create', { method: 'POST', body: { catalogue: fields.catalogue.value, productId: fields.productId.value.trim(), content: content } })
-                    : api('product-save', { method: 'POST', body: { id: product.id, version: product.version, content: content } });
+                    ? api('product-create', { method: 'POST', body: { catalogue: fields.catalogue.value, productId: fields.productId.value.trim(), content: content, position: position } })
+                    : api('product-save', { method: 'POST', body: { id: product.id, version: product.version, content: content, position: position } });
                 return request.then(function (result) {
-                    if (!result.ok) { say(result.data.message || 'The draft could not be saved.', true); return null; }
+                    if (!result.ok) {
+                        if (result.data.errors) { validation = { errors: result.data.errors, warnings: validation.warnings }; showValidation(); }
+                        say(result.data.message || 'The draft could not be saved.', true);
+                        return null;
+                    }
                     dirty = false;
                     if (isNew && !product) {
                         window.location.assign('/admin/products/' + result.data.id);
                         return null;
                     }
                     return api('product?id=' + encodeURIComponent(product.id)).then(function (fresh) {
-                        if (fresh.ok) { product = fresh.data; validation = product.validation; }
+                        if (fresh.ok) {
+                            product = fresh.data;
+                            validation = product.validation;
+                            positionInfo = product.positions;
+                            showPosition();
+                        }
                         say('Draft saved.');
                         clear(historyBox);
                         clear(deleteBox);
@@ -1437,8 +1542,7 @@
                 if (product.canPublish && product.status !== 'archived') {
                     var publish = el('button', { type: 'button', class: 'primary', text: product.status === 'published' ? 'Publish changes' : 'Publish', disabled: product.status === 'published' && !product.hasChanges && !dirty });
                     publish.addEventListener('click', function () {
-                        function go() { act('product-publish', { id: product.id }, 'Published. Visitors see this version.', 'Publish this version to the public catalogue?'); }
-                        if (dirty) save(go); else go();
+                        if (dirty) save(publishWithPositions); else publishWithPositions();
                     });
                     actionsBox.appendChild(publish);
                 }
@@ -1598,11 +1702,11 @@
                         fields.listing_page.appendChild(el('option', { value: '', text: 'Not listed in a grid' }));
                         fields.listing_page.appendChild(el('option', { value: 'chemicals', text: 'Chemical grid' }));
                         fields.listing_page.appendChild(el('option', { value: 'nonchemical', text: 'Non-chemical grid' }));
-                        fields.listing_page.addEventListener('change', function () { refreshTabs(''); });
+                        fields.listing_page.addEventListener('change', function () { refreshTabs(''); showPosition(); });
                         return wrap;
                     }()),
                     input('listing_tab', 'Listing tab', { tag: 'select' }),
-                    input('display_order', 'Display order (smaller numbers first)', { attrs: { type: 'number', step: '1' } })
+                    positionField()
                 ]);
                 var details = el('div', { class: 'grid-form' }, [
                     input('description', 'Description', { tag: 'textarea', wide: true, attrs: { rows: '3' } }),
@@ -1645,6 +1749,7 @@
                     fields.catalogue.disabled = true;
                 }
                 fill(record ? record.content : {});
+                fillPosition(record ? record.positions : gridInfo);
                 dirty = false;
                 clear(historyBox);
                 clear(deleteBox);

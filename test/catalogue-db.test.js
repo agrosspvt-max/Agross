@@ -197,7 +197,8 @@ test('archiving and restoring change the grid, search data and detail page toget
 
     const restored = await o.post('product-restore', { id });
     assert.equal(restored.body.status, 'published');
-    assert.deepEqual((await publicList('chemical')).body.map(p => p.productId), ['sample four', 'keeper']);
+    assert.deepEqual(restored.body.position, { grid: 'chemicals', position: 2 }, 'a restored product comes back at the end of its grid');
+    assert.deepEqual((await publicList('chemical')).body.map(p => p.productId), ['keeper', 'sample four']);
     assert.equal((await publicOne('chemical', 'sample four')).statusCode, 200);
     assert.match((await listingHtml('chemicals')).body, /SAMPLE FOUR/);
     assert.equal((await o.post('product-restore', { id })).statusCode, 409);

@@ -51,11 +51,10 @@ test('cleanContent trims, drops unknown fields and keeps a tab only inside its g
     });
     assert.equal(clean.name, 'Rotomax');
     assert.equal(clean.evil, undefined);
-    assert.equal(clean.display_order, 40);
+    assert.equal(Object.hasOwn(clean, 'display_order'), false, 'a position is not part of the content');
     assert.deepEqual(clean.aliases, ['Rotomaxx']);
     assert.equal(cat.cleanContent({ name: 'x', listing_page: null, listing_tab: 'pgpr' }).listing_tab, null);
     assert.equal(cat.cleanContent({ name: 'x', listing_page: 'nowhere' }).listing_page, null);
-    assert.equal(cat.cleanContent({ name: 'x', display_order: 'abc' }).display_order, null);
     assert.equal(cat.cleanContent({ name: 5, category: ['a'] }).name, '');
     // An uploaded image replaces any old path.
     const replaced = cat.cleanContent({ name: 'x', image: 'products/Old.png', image_id: '11111111-1111-1111-1111-111111111111' });
@@ -105,10 +104,10 @@ test('cards escape names, encode links and use the logo when there is no image',
     assert.ok(withPath.includes('href="product.html?productId=janta"'));
 });
 
-test('a listing lists every placed product under All and again under its tab, in display order', () => {
+test('a listing lists every placed product under All and again under its tab, in position order', () => {
     const tabs = [{ key: 'b', label: 'Beta', display_order: 2 }, { key: 'a', label: 'Alpha', display_order: 1 }];
-    const make = (id, order, tab, page = 'chemicals') => ({ catalogue: 'chemical', productId: id, content: cat.cleanContent({ name: id.toUpperCase(), listing_page: page, listing_tab: tab, display_order: order }) });
-    const html = cat.renderListing('chemicals', [make('three', 30, 'a'), make('one', 10, 'b'), make('two', 20, null), make('elsewhere', 5, null, 'nonchemical')], tabs);
+    const make = (id, position, tab, page = 'chemicals') => ({ catalogue: 'chemical', productId: id, position, content: cat.cleanContent({ name: id.toUpperCase(), listing_page: page, listing_tab: tab }) });
+    const html = cat.renderListing('chemicals', [make('three', 3, 'a'), make('one', 1, 'b'), make('two', 2, null), make('elsewhere', 1, null, 'nonchemical')], tabs);
     assert.ok(html.indexOf('data-tab="tab-1"') < html.indexOf('>\n                            Alpha') && html.indexOf('Alpha') < html.indexOf('Beta'), 'buttons in tab order');
     const section = id => html.slice(html.indexOf('id="' + id + '"'), html.indexOf('id="' + id + '"') + 5000);
     const hrefs = text => [...text.matchAll(/class="block">/g)].length;
