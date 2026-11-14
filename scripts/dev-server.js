@@ -29,7 +29,8 @@ const handlers = {
     catalogue: require('../api/catalogue'),
     openings: require('../api/openings'),
     listing: require('../api/listing'),
-    image: require('../api/image')
+    image: require('../api/image'),
+    binCleanup: require('../api/recruitment-bin-cleanup')
 };
 
 const TYPES = {
@@ -82,6 +83,8 @@ const server = http.createServer(async (req, res) => {
         else if (pathname === '/api/catalogue') handler = handlers.catalogue;
         else if (pathname === '/api/openings') handler = handlers.openings;
         else if (pathname === '/api/image') handler = handlers.image;
+        // Vercel's scheduler calls this once a day in production; locally nothing schedules it, so call it with the bearer secret.
+        else if (pathname === '/api/recruitment-bin-cleanup') handler = handlers.binCleanup;
         else if (pathname === '/chemicals.html' || pathname === '/nonchemical.html') {
             handler = handlers.listing;
             url.searchParams.set('page', pathname === '/chemicals.html' ? 'chemicals' : 'nonchemical');

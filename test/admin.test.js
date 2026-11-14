@@ -814,10 +814,13 @@ test('recruitment outcomes are filterable and each follow-up status keeps its ow
     assert.equal((await save({ status: 'rejected', note: 'Position filled.', expectedStatus: 'new' })).statusCode, 409);
     assert.equal((await save({ status: 'rejected', note: 'Position filled.', expectedStatus: 'shortlisted' })).statusCode, 200);
     assert.equal((await filter('shortlisted')).body.total, 0);
-    const rejectedList = (await filter('rejected')).body;
-    assert.equal(rejectedList.items[0].id, id);
-    assert.equal(rejectedList.items[0].statusNotes, undefined);
+    // A rejected application leaves the active list at once and is found in the Recruitment Bin.
+    assert.equal((await filter('rejected')).body.total, 0);
+    assert.equal((await call(admin, { route: 'bin', cookie })).body.items[0].id, id);
     assert.deepEqual((await detail()).body.statusNotes, { shortlisted: 'Call confirmed.', rejected: 'Position filled.' });
+    assert.equal((await save({ status: 'shortlisted' })).statusCode, 409, 'its status cannot change while it is in the Bin');
+    assert.equal((await call(admin, { method: 'POST', route: 'enquiry-restore', body: { id }, cookie, csrf })).body.status, 'shortlisted');
+    assert.equal((await filter('shortlisted')).body.items[0].id, id);
 
     assert.equal((await save({ status: 'shortlisted' })).statusCode, 200);
     assert.equal((await detail()).body.statusNotes.shortlisted, 'Call confirmed.');

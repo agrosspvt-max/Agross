@@ -21,8 +21,17 @@
     },
     "api/image.js": {
       "maxDuration": 10
+    },
+    "api/recruitment-bin-cleanup.js": {
+      "maxDuration": 20
     }
   },
+  "crons": [
+    {
+      "path": "/api/recruitment-bin-cleanup",
+      "schedule": "30 21 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/chemicals.html",

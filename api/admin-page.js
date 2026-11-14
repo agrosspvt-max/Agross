@@ -14,6 +14,8 @@ function viewFor(pathname) {
     const clean = pathname.replace(/^\/+|\/+$/g, '');
     if (clean === 'admin') return { file: 'overview.html', permission: 'enquiries' };
     if (clean === 'admin/enquiries') return { file: 'inbox.html', permission: 'enquiries' };
+    // The Recruitment Bin needs the same permissions as reading applications.
+    if (clean === 'admin/bin') return { file: 'bin.html', permission: 'enquiries', also: 'recruitment' };
     if (new RegExp('^admin/enquiries/' + UUID + '$', 'i').test(clean)) return { file: 'enquiry.html', permission: 'enquiries' };
     if (clean === 'admin/products') return { file: 'products.html', permission: 'products_edit' };
     if (clean === 'admin/recruiting') return { file: 'recruiting.html', permission: 'recruitment' };
@@ -69,7 +71,7 @@ module.exports = async function adminPage(req, res) {
                 if (hasPermission(session.user, 'products_edit')) return redirect(res, '/admin/products');
                 if (hasPermission(session.user, 'recruitment')) return redirect(res, '/admin/recruiting');
             }
-            if (view.permission && !hasPermission(session.user, view.permission)) {
+            if ((view.permission && !hasPermission(session.user, view.permission)) || (view.also && !hasPermission(session.user, view.also))) {
                 return send(res, 403, 'You do not have access to this page.', 'text/plain; charset=utf-8');
             }
         }

@@ -9,6 +9,7 @@ const notify = require('../lib/notify');
 const adminProducts = require('../lib/admin-products');
 const recruiting = require('../lib/recruiting');
 const analytics = require('../lib/analytics');
+const recruitmentBin = require('../lib/recruitment-bin');
 
 const { authenticate, sendError } = auth;
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -169,8 +170,29 @@ async function route(req, res, name) {
         const body = jsonBody(req);
         if (!body || !UUID.test(String(body.id))) return sendError(res, 400, 'Choose an enquiry.');
         const result = await inbox.setStatus(body.id, body.status, session.user, { note: body.note, expectedStatus: body.expectedStatus });
-        if (!result.ok) return sendError(res, result.status, result.message);
+        if (!result.ok) return sendError(res, result.status, result.message, result.code ? { code: result.code } : {});
         return res.status(200).json({ ok: true, followUp: result.followUp });
+    }
+
+    // The Recruitment Bin: staff who can read applications and have the recruitment permission.
+    if (name === 'bin') {
+        if (method !== 'GET') return methodNotAllowed(res, 'GET');
+        const session = await authenticate(req, res, { permission: 'enquiries' });
+        if (!session) return null;
+        const listed = await recruitmentBin.listBin(session.user);
+        if (!listed) return sendError(res, 403, 'You do not have access to the Recruitment Bin.');
+        return res.status(200).json(listed);
+    }
+
+    if (name === 'enquiry-restore') {
+        if (method !== 'POST') return methodNotAllowed(res, 'POST');
+        const session = await authenticate(req, res, { permission: 'enquiries' });
+        if (!session) return null;
+        const body = jsonBody(req);
+        if (!body || !UUID.test(String(body.id))) return sendError(res, 400, 'Choose an application.');
+        const result = await recruitmentBin.restore(body.id, session.user);
+        if (!result.ok) return sendError(res, result.status, result.message);
+        return res.status(200).json({ ok: true, status: result.status });
     }
 
     if (name === 'enquiry-retry') {

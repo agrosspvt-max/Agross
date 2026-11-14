@@ -15,7 +15,8 @@
     "db:seed": "node --env-file-if-exists=.env.local scripts/seed-sample.js",
     "admin:create-owner": "node --env-file-if-exists=.env.local scripts/admin-create-owner.js",
     "admin:reset-password": "node --env-file-if-exists=.env.local scripts/admin-reset-password.js",
-    "catalogue:import": "node --env-file-if-exists=.env.local scripts/import-catalogue.js"
+    "catalogue:import": "node --env-file-if-exists=.env.local scripts/import-catalogue.js",
+    "bin:purge": "node --env-file-if-exists=.env.local scripts/purge-recruitment-bin.js"
   },
   "dependencies": {
     "google-auth-library": "^11.3.4",

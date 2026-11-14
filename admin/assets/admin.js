@@ -60,7 +60,7 @@
     // A short message at the bottom of the screen that goes away by itself.
     var toastNode = null;
     var toastTimer = null;
-    function toast(message) {
+    function toast(message, milliseconds) {
         if (!toastNode) {
             toastNode = el('div', { class: 'toast', role: 'status', 'aria-live': 'polite' });
             document.body.appendChild(toastNode);
@@ -68,7 +68,7 @@
         toastNode.textContent = message;
         toastNode.classList.add('show');
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(function () { toastNode.classList.remove('show'); }, 2000);
+        toastTimer = setTimeout(function () { toastNode.classList.remove('show'); }, milliseconds || 2000);
     }
 
     function copyText(value, what) {
@@ -184,7 +184,39 @@
         signOut.addEventListener('click', function () {
             api('logout', { method: 'POST', body: {} }).then(function () { window.location.assign('/admin/login'); });
         });
-        top.appendChild(el('div', { class: 'who' }, [currentUser.displayName, signOut]));
+        var who = [currentUser.displayName];
+        if (can('enquiries') && can('recruitment')) who.push(binLink(active));
+        who.push(signOut);
+        top.appendChild(el('div', { class: 'who' }, who));
+    }
+
+    // A trash-bin icon beside the user's name, before Sign out, that opens the Recruitment Bin.
+    // It is a real link, so it works with a keyboard and a touch screen, and it has a text label for screen readers.
+    function binLink(active) {
+        var link = el('a', { class: 'bin-link', href: '/admin/bin', 'aria-label': 'Recruitment Bin', title: 'Recruitment Bin', 'aria-current': active === 'bin' ? 'page' : false });
+        var ns = 'http://www.w3.org/2000/svg';
+        var svg = document.createElementNS(ns, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('width', '20');
+        svg.setAttribute('height', '20');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        ['M3 6h18', 'M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2', 'M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6', 'M10 11v6', 'M14 11v6'].forEach(function (d) {
+            var path = document.createElementNS(ns, 'path');
+            path.setAttribute('d', d);
+            svg.appendChild(path);
+        });
+        link.appendChild(svg);
+        return link;
+    }
+
+    var BIN_MESSAGE = 'Application moved to the Recruitment Bin. It will be deleted after 30 days.';
+    var BIN_HINT = 'Rejected applications move to the Recruitment Bin and are deleted after 30 days. You can restore one from the Bin until then. The applicant is not emailed.';
+
+    function daysLeft(value) {
+        var days = Math.ceil((new Date(value).getTime() - Date.now()) / 86400000);
+        if (days <= 0) return 'less than a day left';
+        return days === 1 ? '1 day left' : days + ' days left';
     }
 
     function can(permission) {
@@ -346,12 +378,15 @@
                     var data = result.data;
                     clear(results);
                     results.appendChild(el('div', { class: 'tiles' }, [
-                        tile('Total submissions', data.total, link(), 'Open these in the inbox'),
+                        tile('Total submissions', data.total, link(), 'Open the active inbox'),
                         tile('New enquiries', data.new, link({ status: 'new' }), 'Open New enquiries')
                     ]));
+                    if (data.rejected) {
+                        results.appendChild(el('p', { class: 'note', text: data.rejected + (data.rejected === 1 ? ' application was' : ' applications were') + ' rejected. Rejected applications stay in the Recruitment Bin for 30 days and are then deleted, but they still count as submissions received.' }));
+                    }
                     var card = el('div', { class: 'card' }, [el('h2', { text: 'Submissions by form type' })]);
                     card.appendChild(el('div', { class: 'form-tiles' }, data.byForm.map(function (row) {
-                        return tile(row.title, row.count, link({ form: row.type }), 'Open ' + row.title);
+                        return tile(row.title, row.count, link({ form: row.type }), row.rejected ? row.active + ' active · ' + row.rejected + ' rejected' : 'Open ' + row.title);
                     })));
                     results.appendChild(card);
                     if (data.total === 0) results.appendChild(el('p', { class: 'note', text: 'No enquiries were saved in this period.' }));
@@ -610,6 +645,8 @@
     function inboxPage() {
         start('inbox', function (main) {
             var params = new URLSearchParams(window.location.search);
+            // Rejected applications are no longer listed here: they are in the Recruitment Bin.
+            if (params.get('status') === 'rejected' && can('recruitment')) { window.location.replace('/admin/bin'); return; }
             var defaults = presetRange('30');
             var from = params.has('from') || params.has('to') ? (params.get('from') || '') : defaults.from;
             var to = params.has('from') || params.has('to') ? (params.get('to') || '') : defaults.to;
@@ -621,14 +658,18 @@
                     return el('option', { value: item[0], text: item[1] });
                 })));
                 node.value = current || '';
-                node.addEventListener('change', function () { page = 1; load(); });
+                node.addEventListener('change', function () {
+                    if (name === 'status' && node.value === 'rejected') { window.location.assign('/admin/bin'); return; }
+                    page = 1;
+                    load();
+                });
                 return el('label', {}, [label, node]);
             }
 
             var filter = dateFilter(from, to, function () { page = 1; load(); });
             var formSelect = select('form', 'Form', FORM_TYPES, params.get('form'));
             var statuses = can('recruitment') ? Object.keys(STATUS_LABELS) : GENERAL_STATUSES;
-            var statusSelect = select('status', 'Status', statuses.map(function (key) { return [key, STATUS_LABELS[key]]; }), params.get('status'));
+            var statusSelect = select('status', 'Status', statuses.map(function (key) { return [key, key === 'rejected' ? 'Rejected (opens the Recruitment Bin)' : STATUS_LABELS[key]]; }), params.get('status'));
             var emailSelect = select('email', 'Email', Object.keys(EMAIL_LABELS).map(function (key) { return [key, EMAIL_LABELS[key]]; }), params.get('email'));
             var search = el('input', { type: 'search', name: 'q', value: params.get('q') || '', placeholder: 'Name, company, email, phone' });
             var searchLabel = el('label', {}, ['Search', search]);
@@ -723,6 +764,8 @@
                 results.appendChild(el('div', { class: 'pager' }, [el('span', { class: 'note', text: 'Showing ' + first + '–' + last + ' of ' + data.total }), el('div', { class: 'buttons' }, [prev, next])]));
             }
 
+            function reloadList() { load(); }
+
             // The position a recruitment applicant applied for, and their résumé.
             function appliedForCell(item) {
                 if (item.formType !== 'recruitment') return el('td', { 'data-label': 'Applied for', text: '—' });
@@ -765,8 +808,10 @@
                 var save = el('button', { type: 'submit', class: 'primary', text: 'Save', disabled: true });
                 var cancel = el('button', { type: 'button', text: 'Cancel' });
                 var message = el('p', { class: 'note', role: 'status', text: 'Loading…' });
+                var binHint = el('p', { class: 'note bin-hint', hidden: true, text: BIN_HINT });
                 var panel = el('form', { class: 'status-editor', 'aria-label': 'Status and notes for ' + item.name }, [
                     el('label', {}, ['Status', select]),
+                    binHint,
                     el('label', {}, [noteLabel, note]),
                     el('div', { class: 'buttons' }, [save, cancel]),
                     message
@@ -786,6 +831,7 @@
                     noteLabel.textContent = 'Notes for ' + STATUS_LABELS[select.value];
                     note.value = drafts[select.value] ?? savedNote();
                     save.disabled = !dirty();
+                    binHint.hidden = select.value !== 'rejected';
                 }
                 // Returns false (and stays open) when there are unsaved changes the owner wants to keep.
                 function close(force) {
@@ -841,6 +887,13 @@
                             return;
                         }
                         item.status = result.data.followUp.status;
+                        if (result.data.followUp.bin) {
+                            // Rejected: the application is now in the Recruitment Bin, so it leaves this list straight away.
+                            close(true);
+                            toast(BIN_MESSAGE, 6000);
+                            reloadList();
+                            return;
+                        }
                         showBadge();
                         close(true);
                         trigger.focus();
@@ -852,6 +905,73 @@
         });
     }
 
+    // ---- Recruitment Bin ---------------------------------------------------------------------
+    // Rejected applications wait here for 30 days. Staff can open one (notes and PDF included) and restore it; after
+    // the 30 days it is deleted for good by the scheduled cleanup.
+
+    function binPage() {
+        start('bin', function (main) {
+            clear(main);
+            main.appendChild(el('h1', { text: 'Recruitment Bin' }));
+            main.appendChild(el('p', { class: 'note', text: 'Applications you reject are kept here for 30 days so an accidental rejection can be undone. After that they are permanently deleted from the Agross database, including the PDF and any notes. Copies already emailed to the recruitment mailbox follow the mailbox’s own retention.' }));
+            var message = el('p', { class: 'error', role: 'alert', hidden: true });
+            var results = el('div', {});
+            main.appendChild(message);
+            main.appendChild(results);
+            load();
+
+            function load() {
+                api('bin').then(function (result) {
+                    if (!result.ok) {
+                        showError(results, result.status === 403 ? 'You do not have access to the Recruitment Bin.' : (result.data.message || 'The Recruitment Bin could not be loaded.'), result.status === 403 ? null : load);
+                        return;
+                    }
+                    render(result.data.items);
+                });
+            }
+
+            function render(items) {
+                clear(results);
+                if (!items.length) {
+                    results.appendChild(el('div', { class: 'card' }, [
+                        el('p', { text: 'The Recruitment Bin is empty.' }),
+                        el('p', { class: 'note', text: 'Applications you reject appear here for 30 days.' })
+                    ]));
+                    return;
+                }
+                var body = el('tbody');
+                items.forEach(function (item) {
+                    var restore = el('button', { type: 'button', text: 'Restore', 'aria-label': 'Restore ' + item.name });
+                    restore.addEventListener('click', function () {
+                        restore.disabled = true;
+                        message.hidden = true;
+                        api('enquiry-restore', { method: 'POST', body: { id: item.id } }).then(function (result) {
+                            if (!result.ok) {
+                                message.textContent = result.data.message || 'The application could not be restored.';
+                                message.hidden = false;
+                                load();
+                                return;
+                            }
+                            toast('Application restored. It is back in Enquiries as ' + STATUS_LABELS[result.data.status] + '.', 5000);
+                            load();
+                        });
+                    });
+                    body.appendChild(el('tr', {}, [
+                        el('td', { 'data-label': 'Applicant' }, [el('a', { href: '/admin/enquiries/' + item.id, text: item.name }), item.hasNote ? el('small', { text: 'Has a rejection note' }) : '']),
+                        el('td', { 'data-label': 'Role', text: item.role }),
+                        el('td', { 'data-label': 'Rejected', title: formatTime(item.rejectedAt) }, [shortDate(item.rejectedAt), el('small', { text: shortTime(item.rejectedAt) })]),
+                        el('td', { 'data-label': 'Deleted after' }, [formatTime(item.deleteAfter), el('small', { text: daysLeft(item.deleteAfter) })]),
+                        el('td', { 'data-label': 'Actions' }, [el('div', { class: 'buttons' }, [restore]), item.hasResume ? resumeActions(item.id) : ''])
+                    ]));
+                });
+                results.appendChild(el('table', { 'aria-label': 'Applications in the Recruitment Bin' }, [
+                    el('thead', {}, [el('tr', {}, ['Applicant', 'Role', 'Rejected', 'Deleted after', 'Actions'].map(function (heading) { return el('th', { scope: 'col', text: heading }); }))]),
+                    body
+                ]));
+            }
+        });
+    }
+
     // ---- one enquiry -----------------------------------------------------------------
 
     function enquiryPage() {
@@ -860,7 +980,9 @@
             clear(main);
             var holder = el('div', {});
             var noteDrafts = {};
-            main.appendChild(el('a', { class: 'back', href: '/admin/enquiries', text: '← Back to enquiries' }));
+            var pendingNotice = '';      // shown once, after a rejection or a restore reloads the page
+            var backLink = el('a', { class: 'back', href: '/admin/enquiries', text: '← Back to enquiries' });
+            main.appendChild(backLink);
             main.appendChild(holder);
             load();
 
@@ -891,8 +1013,10 @@
                     });
                     return button;
                 });
+                var binHint = el('p', { class: 'note bin-hint', hidden: true, text: BIN_HINT });
                 var form = el('form', { class: 'follow-up-form' }, [
                     el('div', { class: 'buttons' }, buttons),
+                    binHint,
                     el('label', {}, [noteLabel, note]),
                     el('div', { class: 'buttons' }, [save]),
                     message, changed
@@ -909,6 +1033,7 @@
                     noteLabel.textContent = 'Notes for ' + STATUS_LABELS[selected];
                     note.value = noteDrafts[selected] ?? savedNote();
                     save.disabled = selected === enquiry.status && note.value.trim() === savedNote();
+                    binHint.hidden = selected !== 'rejected';
                     changed.textContent = enquiry.statusChangedAt
                         ? 'Last changed ' + formatTime(enquiry.statusChangedAt) + (enquiry.statusChangedBy ? ' by ' + enquiry.statusChangedBy : '') + '.'
                         : '';
@@ -930,6 +1055,13 @@
                     } }).then(function (result) {
                         note.disabled = false;
                         buttons.forEach(function (button) { button.disabled = false; });
+                        if (result.ok && result.data.followUp.bin) {
+                            // Rejected: the page reloads as the application's Recruitment Bin view.
+                            pendingNotice = BIN_MESSAGE;
+                            noteDrafts = {};
+                            load();
+                            return;
+                        }
                         if (result.ok) {
                             Object.assign(enquiry, result.data.followUp);
                             delete noteDrafts[selected];
@@ -943,8 +1075,46 @@
                 return el('div', { class: 'card' }, [el('h2', { text: 'Follow-up status' }), form]);
             }
 
+            // What an application in the Recruitment Bin shows instead of the follow-up form: when it was rejected, when it will
+            // be deleted, its notes (read only) and Restore.
+            function binCard(enquiry) {
+                var message = el('p', { class: 'error', role: 'alert', hidden: true });
+                var restore = el('button', { type: 'button', class: 'primary', text: 'Restore' });
+                restore.addEventListener('click', function () {
+                    restore.disabled = true;
+                    message.hidden = true;
+                    api('enquiry-restore', { method: 'POST', body: { id: enquiry.id } }).then(function (result) {
+                        if (!result.ok) {
+                            restore.disabled = false;
+                            message.textContent = result.data.message || 'The application could not be restored.';
+                            message.hidden = false;
+                            return;
+                        }
+                        pendingNotice = 'Application restored. It is back in the Enquiries list as ' + STATUS_LABELS[result.data.status] + '.';
+                        load();
+                    });
+                });
+                var notes = Object.keys(enquiry.statusNotes || {}).map(function (key) {
+                    return el('div', {}, [el('strong', { text: 'Notes for ' + (STATUS_LABELS[key] || key) }), el('p', { class: 'note-text', text: enquiry.statusNotes[key] })]);
+                });
+                return el('div', { class: 'card bin-card' }, [
+                    el('h2', { text: 'In the Recruitment Bin' }),
+                    el('p', { text: 'Rejected ' + formatTime(enquiry.bin.rejectedAt) + '.' }),
+                    el('p', {}, ['It will be permanently deleted after ' + formatTime(enquiry.bin.deleteAfter) + ' (' + daysLeft(enquiry.bin.deleteAfter) + '). Restore it before then to keep it.']),
+                    notes.length ? el('div', { class: 'stack' }, notes) : el('p', { class: 'note', text: 'There are no notes.' }),
+                    el('div', { class: 'buttons' }, [restore, el('a', { class: 'button', href: '/admin/bin', text: 'Open the Recruitment Bin' })]),
+                    message
+                ]);
+            }
+
             function render(enquiry) {
                 clear(holder);
+                backLink.href = enquiry.bin ? '/admin/bin' : '/admin/enquiries';
+                backLink.textContent = enquiry.bin ? '← Back to the Recruitment Bin' : '← Back to enquiries';
+                if (pendingNotice) {
+                    holder.appendChild(el('p', { class: 'notice-ok', role: 'status', text: pendingNotice }));
+                    pendingNotice = '';
+                }
                 holder.appendChild(el('h1', { text: enquiry.formTitle + ' enquiry' }));
 
                 var fields = el('dl', { class: 'fields' });
@@ -966,7 +1136,7 @@
                     fields.appendChild(el('dd', { text: enquiry.sourcePage }));
                 }
 
-                var statusCard = followUpCard(enquiry);
+                var statusCard = enquiry.bin ? binCard(enquiry) : followUpCard(enquiry);
 
                 var note = enquiry.notification;
                 var mailCard = el('div', { class: 'card' }, [
@@ -1926,5 +2096,6 @@
     else if (page === 'overview') overviewPage();
     else if (page === 'analytics') analyticsPage();
     else if (page === 'inbox') inboxPage();
+    else if (page === 'bin') binPage();
     else if (page === 'enquiry') enquiryPage();
 }());
