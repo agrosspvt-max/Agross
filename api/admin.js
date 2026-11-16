@@ -220,7 +220,7 @@ async function route(req, res, name) {
         if (!session) return null;
         if (method === 'GET') return res.status(200).json({ openings: await recruiting.adminOpenings() });
         const checked = recruiting.validateOpening(jsonBody(req));
-        if (checked.error) return sendError(res, 400, checked.error);
+        if (checked.error) return sendError(res, 400, checked.error, checked.errors ? { errors: checked.errors } : {});
         const opening = await recruiting.saveOpening(checked.opening, session.user.id);
         if (!opening) return sendError(res, 404, 'Opening not found.');
         return res.status(checked.opening.id ? 200 : 201).json({ opening });

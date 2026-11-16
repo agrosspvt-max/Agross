@@ -23,7 +23,12 @@
 .careers-job-title { color: #172620; font-size: clamp(1.125rem, 2vw, 1.3125rem); line-height: 1.3; font-weight: 700; margin: 0; overflow-wrap: anywhere; }
 .careers-area { color: #07614c; font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 .25rem; overflow-wrap: anywhere; }
 .careers-description { max-width: 72ch; color: #43534b; font-size: .9375rem; line-height: 1.55; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.careers-preview { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin-top: .45rem; }
+.careers-paragraph { white-space: normal; }
+.careers-paragraph + .careers-paragraph { margin-top: .8rem; }
+.careers-section { margin-top: 1.6rem; }
+.careers-detail-body .careers-section-heading { margin: 0 0 .7rem; }
+.careers-regular { font-weight: 400; }
+.careers-preview { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin-top: .45rem; }
 .careers-view-link { display: inline-block; color: #065746; font-size: .875rem; font-weight: 650; margin-top: .7rem; }
 .careers-job:hover .careers-view-link { text-decoration: underline; }
 .careers-detail-mode .careers-hero, .careers-detail-mode .careers-culture, .careers-detail-mode .careers-list-heading { display: none; }

@@ -199,3 +199,29 @@ details.management[open] > summary::before { transform: rotate(90deg); }
 }
 
 [hidden] { display: none !important; }
+
+/* job openings: formatted text and sections */
+.rt-field { display: block; }
+.rt-label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: .2rem; }
+.rt { border: 1px solid #c4ccd6; border-radius: 8px; background: #fff; overflow: hidden; }
+.rt:focus-within { border-color: var(--green); box-shadow: 0 0 0 2px #cfe9df; }
+.rt-toolbar { display: flex; gap: .25rem; padding: .25rem; border-bottom: 1px solid var(--line); background: #fafbfc; }
+.rt-button { min-width: 2.5rem; min-height: 2.5rem; padding: 0; text-align: center; touch-action: manipulation; }
+.rt-button[aria-pressed="true"] { background: #e3f3ee; border-color: var(--green); color: var(--green-dark); }
+.rt-editor { padding: .5rem .6rem; min-height: 7rem; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; color: var(--ink); line-height: 1.5; font-weight: 400; font-style: normal; }
+.rt-editor > div + div { margin-top: .6rem; }
+.rt-heading { min-height: 2.4rem; font-weight: 700; }
+.rt-editor[data-empty="true"]::before { content: attr(data-placeholder); color: #8a96a3; float: left; height: 0; pointer-events: none; font-weight: 400; }
+.rt-editor[aria-invalid="true"] { background: #fff8f7; }
+.rt .field-error { padding: 0 .6rem .45rem; margin-top: 0; }
+.rt-b { font-weight: 700; }
+.rt-nb { font-weight: 400; }
+.rt-i { font-style: italic; }
+.rt-ni { font-style: normal; }
+.opening-sections { display: grid; gap: .9rem; }
+.opening-sections:empty { display: none; }
+.opening-section { border: 1px solid var(--line); border-radius: 10px; padding: .8rem; display: grid; gap: .7rem; background: #fcfdfd; }
+.opening-section-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.opening-section-title { margin: 0; font-size: 1rem; }
+.add-section { justify-self: start; }
+@media (pointer: coarse), (max-width: 760px) { .rt-button { min-width: 2.75rem; min-height: 2.75rem; } .add-section, .remove-section { min-height: 2.75rem; } }

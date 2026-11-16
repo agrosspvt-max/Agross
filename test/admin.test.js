@@ -570,7 +570,11 @@ test('Recruiting requires permission and only open positions appear on Join Us',
     assert.equal((await call(openingsHandler, { query: { id } })).statusCode, 404);
     assert.equal((await save({ ...body, id, isOpen: true })).statusCode, 200);
     const listed = await call(openingsHandler);
-    assert.deepEqual(listed.body, { openings: [{ id, designation: body.designation, area: body.area.trim(), description: body.description }] });
+    // The public list carries the plain description (older pages read it), a short excerpt, and the formatted copy.
+    assert.deepEqual(listed.body, { openings: [{
+        id, designation: body.designation, area: body.area.trim(), description: body.description, excerpt: body.description,
+        intro: [[{ t: body.description }]], sections: []
+    }] });
     assert.equal(listed.headers['cache-control'], 'no-store');
     const edited = { ...body, id, area: 'Indore', description: 'Travel to field sites.\nTraining provided.', isOpen: true };
     assert.equal((await save(edited)).statusCode, 200);

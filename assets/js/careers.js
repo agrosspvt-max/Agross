@@ -8,6 +8,39 @@
         return node;
     }
 
+    function wrap(tag, className, child) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        node.appendChild(child);
+        return node;
+    }
+
+    // Formatted text arrives as data (runs of text with bold and italic flags), never as HTML, and is built from text
+    // nodes and a few fixed elements, so nothing in it can run as a script.
+    function appendRuns(parent, runs, isHeading) {
+        (runs || []).forEach(function (run) {
+            if (!run || typeof run.t !== 'string') return;
+            run.t.split('\n').forEach(function (line, index) {
+                if (index) parent.appendChild(document.createElement('br'));
+                if (!line) return;
+                var node = document.createTextNode(line);
+                // A heading is bold unless a part of it was made regular.
+                if (isHeading) { if (run.b === false) node = wrap('span', 'careers-regular', node); }
+                else if (run.b === true) node = wrap('strong', '', node);
+                if (run.i === true) node = wrap('em', '', node);
+                parent.appendChild(node);
+            });
+        });
+    }
+
+    function appendParagraphs(parent, paragraphs) {
+        (paragraphs || []).forEach(function (runs) {
+            var paragraph = element('p', 'careers-description careers-paragraph', '');
+            appendRuns(paragraph, runs, false);
+            parent.appendChild(paragraph);
+        });
+    }
+
     function openingUrl(opening) {
         return '/joinus.html?opening=' + encodeURIComponent(opening.id);
     }
@@ -23,7 +56,7 @@
         if (opening.area) card.appendChild(element('p', 'careers-area', opening.area));
         card.append(
             element('h3', 'careers-job-title', opening.designation),
-            element('p', 'careers-description careers-preview', opening.description),
+            element('p', 'careers-description careers-preview', opening.excerpt || opening.description),
             element('span', 'careers-view-link', 'View details →')
         );
         return card;
@@ -50,10 +83,18 @@
             heading.appendChild(apply);
 
             var description = element('div', 'careers-detail-body', '');
-            description.append(
-                element('h2', '', 'Job description'),
-                element('p', 'careers-description', opening.description)
-            );
+            description.appendChild(element('h2', '', 'Job description'));
+            if (Array.isArray(opening.intro) && opening.intro.length) appendParagraphs(description, opening.intro);
+            else description.appendChild(element('p', 'careers-description', opening.description));
+            // The sections an admin added, in the order they were added.
+            (Array.isArray(opening.sections) ? opening.sections : []).forEach(function (section) {
+                var block = element('section', 'careers-section', '');
+                var title = element('h2', 'careers-section-heading', '');
+                appendRuns(title, section.heading, true);
+                block.appendChild(title);
+                appendParagraphs(block, section.body);
+                description.appendChild(block);
+            });
             panel.appendChild(description);
         } else {
             heading.appendChild(element('p', 'careers-description', 'This position is no longer open.'));

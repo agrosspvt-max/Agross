@@ -1961,6 +1961,345 @@
         });
     }
 
+    // ---- formatted text for job openings -------------------------------------------------------------
+    // A small editor for bold and italic text. The formatting shows as it is applied. The text is read back as
+    // paragraphs of runs ({ t, b, i }) from how each piece of text looks (its computed weight and style), so the result
+    // does not depend on which markup a browser produced. Pasted and dropped content is only ever inserted as plain text.
+    // A heading is one line and is bold unless a part of it is switched to regular.
+
+    var BLOCK_TAGS = { DIV: 1, P: 1, LI: 1, UL: 1, OL: 1, H1: 1, H2: 1, H3: 1, H4: 1, BLOCKQUOTE: 1, PRE: 1 };
+    var richFieldCount = 0;
+
+    function isBoldText(node) {
+        var weight = window.getComputedStyle(node.nodeType === 1 ? node : node.parentNode).fontWeight;
+        return weight === 'bold' || parseInt(weight, 10) >= 600;
+    }
+
+    function isItalicText(node) {
+        var style = window.getComputedStyle(node.nodeType === 1 ? node : node.parentNode).fontStyle;
+        return style === 'italic' || style === 'oblique';
+    }
+
+    function richEditor(config) {
+        var multiline = Boolean(config.multiline);
+        var editable = el('div', {
+            class: 'rt-editor' + (multiline ? '' : ' rt-heading'), contenteditable: 'true', role: 'textbox', spellcheck: 'true',
+            'aria-multiline': String(multiline), 'aria-label': config.label, 'data-placeholder': config.placeholder || '', 'data-empty': 'true'
+        });
+        var bold = el('button', { type: 'button', class: 'rt-button', 'aria-pressed': 'false', 'aria-label': 'Bold', title: 'Bold (Ctrl+B)' }, [el('strong', { text: 'B' })]);
+        var italic = el('button', { type: 'button', class: 'rt-button', 'aria-pressed': 'false', 'aria-label': 'Italic', title: 'Italic (Ctrl+I)' }, [el('em', { text: 'I' })]);
+        var toolbar = el('div', { class: 'rt-toolbar', role: 'toolbar', 'aria-label': config.label + ': formatting' }, [bold, italic]);
+        var error = el('span', { class: 'field-error', role: 'alert', hidden: true });
+        var node = el('div', { class: 'rt' }, [toolbar, editable, error]);
+        var saved = null; // the last selection inside this editor, kept for when focus moves to a button
+
+        function syncEmpty() {
+            editable.setAttribute('data-empty', String(editable.textContent.replace(/\u200b/g, '') === ''));
+        }
+
+        // A description always sits in paragraph blocks, so a new paragraph looks different from a line break.
+        function ensureBlock() {
+            if (!multiline || editable.firstElementChild) return;
+            clear(editable);
+            editable.appendChild(el('div', {}, [el('br')]));
+        }
+
+        // Text pieces inside a range, with the part of each that is selected.
+        function segmentsOf(range) {
+            var out = [];
+            var walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+            var text;
+            while ((text = walker.nextNode())) {
+                if (!range.intersectsNode(text)) continue;
+                var start = text === range.startContainer ? range.startOffset : 0;
+                var end = text === range.endContainer ? range.endOffset : text.length;
+                if (end > start) out.push({ node: text, start: start, end: end });
+            }
+            return out;
+        }
+
+        function stateOf(flag) {
+            if (!saved) return false;
+            var test = flag === 'b' ? isBoldText : isItalicText;
+            if (saved.collapsed) return test(saved.startContainer);
+            var segments = segmentsOf(saved);
+            return segments.length > 0 && segments.every(function (segment) { return test(segment.node); });
+        }
+
+        function showState() {
+            bold.setAttribute('aria-pressed', String(stateOf('b')));
+            italic.setAttribute('aria-pressed', String(stateOf('i')));
+        }
+
+        function remember() {
+            var selection = window.getSelection();
+            if (!selection.rangeCount) return;
+            var range = selection.getRangeAt(0);
+            if (!editable.contains(range.startContainer) || !editable.contains(range.endContainer)) return;
+            saved = range.cloneRange();
+            showState();
+        }
+        document.addEventListener('selectionchange', remember);
+        // Some browsers are slow to report a selection made with the mouse or keys, so look again when they finish.
+        editable.addEventListener('mouseup', remember);
+        editable.addEventListener('keyup', remember);
+
+        // Makes one piece of text bold (or regular) or italic (or not). A small marked span carries the change; a span
+        // that already wraps just this text is reused, so repeated toggling does not pile up markup.
+        function setFlag(text, flag, on) {
+            if ((flag === 'b' ? isBoldText(text) : isItalicText(text)) === on) return;
+            var onClass = flag === 'b' ? 'rt-b' : 'rt-i';
+            var offClass = flag === 'b' ? 'rt-nb' : 'rt-ni';
+            var parent = text.parentNode;
+            var mark = parent !== editable && parent.classList.contains('rt-mark') && parent.childNodes.length === 1 ? parent : null;
+            if (!mark) {
+                mark = el('span', { class: 'rt-mark' });
+                parent.insertBefore(mark, text);
+                mark.appendChild(text);
+            }
+            mark.classList.remove(onClass, offClass);
+            mark.classList.add(on ? onClass : offClass);
+        }
+
+        function toggleRange(range, flag) {
+            var segments = segmentsOf(range);
+            if (!segments.length) return range;
+            var test = flag === 'b' ? isBoldText : isItalicText;
+            var turnOn = !segments.every(function (segment) { return test(segment.node); });
+            var pieces = [];
+            for (var k = segments.length - 1; k >= 0; k--) { // last piece first, so earlier offsets stay valid
+                var piece = segments[k].node;
+                if (segments[k].end < piece.length) piece.splitText(segments[k].end);
+                if (segments[k].start > 0) piece = piece.splitText(segments[k].start);
+                pieces.unshift(piece);
+            }
+            pieces.forEach(function (piece) { setFlag(piece, flag, turnOn); });
+            var next = document.createRange();
+            next.setStartBefore(pieces[0]);
+            next.setEndAfter(pieces[pieces.length - 1]);
+            return next;
+        }
+
+        // With nothing selected, the next characters typed take the new setting: an invisible marker holds the caret.
+        function toggleAtCaret(range, flag) {
+            var test = flag === 'b' ? isBoldText : isItalicText;
+            var here = range.startContainer;
+            var holder;
+            if (here.nodeType === 3 && here.nodeValue === '\u200b' && here.parentNode.classList.contains('rt-mark')) {
+                holder = here;
+            } else {
+                holder = document.createTextNode('\u200b');
+                var mark = el('span', { class: 'rt-mark' }, [holder]);
+                if (here.nodeType === 3) here.parentNode.insertBefore(mark, here.splitText(range.startOffset));
+                else here.insertBefore(mark, here.childNodes[range.startOffset] || null);
+            }
+            setFlag(holder, flag, !test(holder));
+            var caret = document.createRange();
+            caret.setStart(holder, holder.length);
+            caret.collapse(true);
+            return caret;
+        }
+
+        function toggle(flag) {
+            remember(); // the selection as it is now; the remembered one is only for when focus has moved to a button
+            if (!saved || editable.getAttribute('contenteditable') !== 'true') return;
+            editable.focus({ preventScroll: true });
+            var selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(saved);
+            var range = selection.getRangeAt(0);
+            var next = range.collapsed ? toggleAtCaret(range, flag) : toggleRange(range, flag);
+            selection.removeAllRanges();
+            selection.addRange(next);
+            saved = next.cloneRange();
+            showState();
+            syncEmpty();
+            if (config.onChange) config.onChange();
+        }
+
+        function insertPlain(text) {
+            text = text.replace(/\r\n?/g, '\n');
+            if (!multiline) text = text.replace(/\s*\n\s*/g, ' ');
+            if (!text) return;
+            if (!document.execCommand('insertText', false, text)) {
+                var selection = window.getSelection();
+                if (!selection.rangeCount) return;
+                var range = selection.getRangeAt(0);
+                var piece = document.createTextNode(text);
+                range.deleteContents();
+                range.insertNode(piece);
+                range.setStartAfter(piece);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+            syncEmpty();
+            if (config.onChange) config.onChange();
+        }
+
+        editable.addEventListener('keydown', function (event) {
+            var modifier = (event.ctrlKey || event.metaKey) && !event.altKey;
+            var key = event.key && event.key.toLowerCase();
+            if (modifier && (key === 'b' || key === 'i')) {
+                event.preventDefault();
+                remember();
+                toggle(key);
+            } else if (event.key === 'Enter' && !multiline) {
+                event.preventDefault();
+            }
+        });
+        // The formatting menus of phones and some browsers arrive here instead of as key presses.
+        editable.addEventListener('beforeinput', function (event) {
+            if (event.inputType === 'formatBold' || event.inputType === 'formatItalic') {
+                event.preventDefault();
+                remember();
+                toggle(event.inputType === 'formatBold' ? 'b' : 'i');
+            } else if (/^format/.test(event.inputType) || (!multiline && /^insert(Paragraph|LineBreak)$/.test(event.inputType))) {
+                event.preventDefault();
+            }
+        });
+        editable.addEventListener('paste', function (event) {
+            event.preventDefault();
+            insertPlain(((event.clipboardData || window.clipboardData).getData('text/plain')) || '');
+        });
+        editable.addEventListener('dragover', function (event) { event.preventDefault(); });
+        editable.addEventListener('drop', function (event) { event.preventDefault(); });
+        editable.addEventListener('input', function () {
+            ensureBlock();
+            syncEmpty();
+            if (config.onChange) config.onChange();
+        });
+        [bold, italic].forEach(function (button) {
+            // Pressing the button must not take the selection away from the text.
+            button.addEventListener('mousedown', function (event) { event.preventDefault(); });
+        });
+        // Leaving the field clears the highlight; the selection is still remembered for the buttons.
+        node.addEventListener('focusout', function (event) {
+            if (event.relatedTarget && node.contains(event.relatedTarget)) return;
+            bold.setAttribute('aria-pressed', 'false');
+            italic.setAttribute('aria-pressed', 'false');
+        });
+        bold.addEventListener('click', function () { toggle('b'); });
+        italic.addEventListener('click', function () { toggle('i'); });
+
+        function appendRuns(parent, runs) {
+            runs.forEach(function (run) {
+                var wantBold = multiline ? run.b === true : run.b !== false;
+                var classes = [];
+                if (wantBold !== !multiline) classes.push(wantBold ? 'rt-b' : 'rt-nb');
+                if (run.i) classes.push('rt-i');
+                run.t.split('\n').forEach(function (line, index) {
+                    if (index) parent.appendChild(el('br'));
+                    if (!line) return;
+                    var text = document.createTextNode(line);
+                    parent.appendChild(classes.length ? el('span', { class: 'rt-mark ' + classes.join(' ') }, [text]) : text);
+                });
+            });
+        }
+
+        function write(value) {
+            clear(editable);
+            saved = null;
+            if (!multiline) {
+                appendRuns(editable, value || []);
+            } else {
+                (value || []).forEach(function (paragraph) {
+                    var block = el('div');
+                    appendRuns(block, paragraph);
+                    editable.appendChild(block);
+                });
+            }
+            ensureBlock();
+            showState();
+            syncEmpty();
+        }
+
+        // Paragraphs of runs (a heading: one list of runs) from what is on screen.
+        function read() {
+            var paragraphs = [];
+            var current = null;
+            function runs() {
+                if (!current) { current = []; paragraphs.push(current); }
+                return current;
+            }
+            function add(list, text, b, i) {
+                var last = list[list.length - 1];
+                if (last && last.b === b && last.i === i) last.t += text;
+                else list.push({ t: text, b: b, i: i });
+            }
+            function walk(parent) {
+                Array.prototype.forEach.call(parent.childNodes, function (child) {
+                    if (child.nodeType === 3) {
+                        var text = child.nodeValue.replace(/\u200b/g, '').replace(/\u00a0/g, ' ').replace(/\r?\n/g, ' ');
+                        if (text) add(runs(), text, isBoldText(child), isItalicText(child));
+                    } else if (child.nodeType === 1) {
+                        if (child.nodeName === 'BR') {
+                            var list = runs();
+                            var last = list[list.length - 1];
+                            add(list, '\n', last ? last.b : false, last ? last.i : false);
+                        } else if (BLOCK_TAGS[child.nodeName]) {
+                            current = null;
+                            walk(child);
+                            current = null;
+                        } else {
+                            walk(child);
+                        }
+                    }
+                });
+            }
+            walk(editable);
+            var cleaned = paragraphs.map(function (paragraph) {
+                // A line break at either end only holds an empty line open in the browser.
+                while (paragraph.length && !paragraph[paragraph.length - 1].t.replace(/\n+$/, '')) paragraph.pop();
+                if (paragraph.length) paragraph[paragraph.length - 1].t = paragraph[paragraph.length - 1].t.replace(/\n+$/, '');
+                while (paragraph.length && !paragraph[0].t.replace(/^\n+/, '')) paragraph.shift();
+                if (paragraph.length) paragraph[0].t = paragraph[0].t.replace(/^\n+/, '');
+                return paragraph;
+            }).filter(function (paragraph) {
+                return paragraph.some(function (run) { return run.t.trim(); });
+            });
+            function plain(run) {
+                var out = { t: run.t };
+                if (multiline) { if (run.b) out.b = true; } else { out.b = run.b; }
+                if (run.i) out.i = true;
+                return out;
+            }
+            if (!multiline) {
+                return [].concat.apply([], cleaned).map(function (run) { return plain({ t: run.t.replace(/\n/g, ' '), b: run.b, i: run.i }); });
+            }
+            return cleaned.map(function (paragraph) { return paragraph.map(plain); });
+        }
+
+        ensureBlock();
+        return {
+            node: node,
+            editable: editable,
+            read: read,
+            write: write,
+            focus: function () { editable.focus(); },
+            isEmpty: function () { return read().length === 0; },
+            setError: function (message) {
+                error.textContent = message || '';
+                error.hidden = !message;
+                if (message) editable.setAttribute('aria-invalid', 'true');
+                else editable.removeAttribute('aria-invalid');
+            },
+            setDisabled: function (disabled) {
+                editable.setAttribute('contenteditable', disabled ? 'false' : 'true');
+                bold.disabled = italic.disabled = disabled;
+            },
+            destroy: function () { document.removeEventListener('selectionchange', remember); }
+        };
+    }
+
+    // A label above an editor, linked so a screen reader announces it with the field.
+    function richField(text, editor) {
+        var id = 'rt-label-' + (++richFieldCount);
+        editor.editable.removeAttribute('aria-label');
+        editor.editable.setAttribute('aria-labelledby', id);
+        return el('div', { class: 'rt-field' }, [el('span', { class: 'rt-label', id: id, text: text }), editor.node]);
+    }
+
     function recruitingPage() {
         start('recruiting', function (main) {
             clear(main).appendChild(el('div', { class: 'page-head' }, [
@@ -1982,11 +2321,14 @@
             function render(openings) {
                 var activeId;
                 var saving = false;
+                var sections = []; // { node, title, heading, body, remove }
                 var listing = el('div', { class: 'stack' });
                 var formTitle = el('h2', { text: 'Create opening' });
                 var designation = el('input', { type: 'text', required: true, maxlength: 120 });
                 var area = el('input', { name: 'area', type: 'text', maxlength: 120, placeholder: 'e.g. Bhopal, Madhya Pradesh' });
-                var description = el('textarea', { rows: 7, required: true, maxlength: 5000 });
+                var description = richEditor({ label: 'Description', multiline: true, placeholder: 'Introduce the role' });
+                var sectionList = el('div', { class: 'opening-sections' });
+                var addSection = el('button', { type: 'button', class: 'add-section', text: '+ Add section' });
                 var visibility = el('select', {}, [
                     el('option', { value: 'closed', text: 'Closed — hidden from Join Us' }),
                     el('option', { value: 'open', text: 'Open — accepting applications' })
@@ -1998,7 +2340,9 @@
                 var form = el('form', { class: 'form' }, [
                     el('label', {}, ['Designation', designation]),
                     el('label', {}, ['Area (optional)', area]),
-                    el('label', {}, ['Description', description]),
+                    richField('Description', description),
+                    sectionList,
+                    addSection,
                     el('label', {}, ['Status', visibility]),
                     el('div', { class: 'buttons' }, [submit, cancel]),
                     message
@@ -2012,11 +2356,59 @@
                 );
                 draw();
 
+                function renumber() {
+                    sections.forEach(function (section, index) {
+                        section.title.textContent = 'Section ' + (index + 1);
+                        section.remove.setAttribute('aria-label', 'Remove section ' + (index + 1));
+                    });
+                }
+
+                // Appends one section, with the heading and description of a saved one or empty fields.
+                function addSectionRow(data) {
+                    var heading = richEditor({ label: 'Section heading', multiline: false, placeholder: 'e.g. Key Responsibilities' });
+                    var body = richEditor({ label: 'Section description', multiline: true, placeholder: 'Describe this section' });
+                    var title = el('h3', { class: 'opening-section-title' });
+                    var remove = el('button', { type: 'button', class: 'remove-section', text: 'Remove section' });
+                    var node = el('div', { class: 'opening-section', role: 'group' }, [
+                        el('div', { class: 'opening-section-head' }, [title, remove]),
+                        richField('Section heading', heading),
+                        richField('Section description', body)
+                    ]);
+                    var section = { node: node, title: title, heading: heading, body: body, remove: remove };
+                    heading.write(data && data.heading);
+                    body.write(data && data.body);
+                    remove.addEventListener('click', function () {
+                        if (saving) return;
+                        var filled = !heading.isEmpty() || !body.isEmpty();
+                        if (filled && !window.confirm('Remove this section and its text?')) return;
+                        heading.destroy();
+                        body.destroy();
+                        node.remove();
+                        sections.splice(sections.indexOf(section), 1);
+                        renumber();
+                        addSection.focus();
+                    });
+                    sections.push(section);
+                    sectionList.appendChild(node);
+                    renumber();
+                    return section;
+                }
+
+                function clearErrors() {
+                    description.setError('');
+                    sections.forEach(function (section) { section.heading.setError(''); section.body.setError(''); });
+                }
+
                 function setForm(opening) {
                     activeId = opening && opening.id;
                     designation.value = opening ? opening.designation : '';
                     area.value = opening && opening.area || '';
-                    description.value = opening ? opening.description : '';
+                    description.write(opening ? opening.intro : []);
+                    sections.forEach(function (section) { section.heading.destroy(); section.body.destroy(); });
+                    sections.length = 0;
+                    clear(sectionList);
+                    ((opening && opening.sections) || []).forEach(addSectionRow);
+                    clearErrors();
                     visibility.value = opening && opening.isOpen ? 'open' : 'closed';
                     formTitle.textContent = opening ? 'Edit opening' : 'Create opening';
                     submit.textContent = opening ? 'Save changes' : 'Create opening';
@@ -2056,22 +2448,47 @@
                 }
                 cancel.addEventListener('click', startNew);
                 newOpening.addEventListener('click', startNew);
+                addSection.addEventListener('click', function () {
+                    if (saving) return;
+                    addSectionRow().heading.focus();
+                });
+
+                function setSaving(on) {
+                    saving = on;
+                    [designation, area, visibility, submit, cancel, addSection].forEach(function (control) { control.disabled = on; });
+                    description.setDisabled(on);
+                    sections.forEach(function (section) { section.heading.setDisabled(on); section.body.setDisabled(on); section.remove.disabled = on; });
+                }
 
                 form.addEventListener('submit', async function (event) {
                     event.preventDefault();
                     if (saving) return;
-                    var body = { id: activeId, designation: designation.value, area: area.value, description: description.value, isOpen: visibility.value === 'open' };
-                    var controls = [designation, area, description, visibility, submit, cancel];
-                    saving = true;
-                    controls.forEach(function (control) { control.disabled = true; });
+                    var body = {
+                        id: activeId, designation: designation.value, area: area.value, intro: description.read(), isOpen: visibility.value === 'open',
+                        // Every section is sent, empty ones too, so a problem is reported against the right section.
+                        sections: sections.map(function (section) { return { heading: section.heading.read(), body: section.body.read() }; })
+                    };
+                    clearErrors();
+                    setSaving(true);
                     message.className = 'note recruiting-message';
                     message.textContent = 'Saving…';
                     var result = await api('recruiting', { method: 'POST', body: body });
-                    controls.forEach(function (control) { control.disabled = false; });
-                    saving = false;
+                    setSaving(false);
                     if (!result.ok) {
                         message.className = 'error recruiting-message';
                         message.textContent = result.data.message || 'Could not save the opening.';
+                        // Everything typed stays in the form. Problems are shown next to the field they belong to.
+                        var errors = result.data.errors || {};
+                        var first = null;
+                        if (errors.intro) { description.setError(errors.intro); first = description; }
+                        Object.keys(errors.sections || {}).forEach(function (index) {
+                            var section = sections[Number(index)];
+                            if (!section) return;
+                            var problem = errors.sections[index];
+                            if (problem.heading) { section.heading.setError(problem.heading); first = first || section.heading; }
+                            if (problem.body) { section.body.setError(problem.body); first = first || section.body; }
+                        });
+                        if (first) first.focus();
                         return;
                     }
                     var saved = result.data.opening;
