@@ -211,6 +211,9 @@
     }
 
     var BIN_MESSAGE = 'Application moved to the Recruitment Bin. It will be deleted after 30 days.';
+    // Delete, offered with the statuses of General Contact, Dealership and Farming enquiries (not applications, which go to the Bin).
+    var DELETE = 'delete';
+    var DELETE_HINT = 'Deletes this enquiry permanently, with its notes and email history. It cannot be restored. It still counts as received on the Overview.';
     var BIN_HINT = 'Rejected applications move to the Recruitment Bin and are deleted after 30 days. You can restore one from the Bin until then. The applicant is not emailed.';
 
     function daysLeft(value) {
@@ -671,11 +674,13 @@
             var statuses = can('recruitment') ? Object.keys(STATUS_LABELS) : GENERAL_STATUSES;
             var statusSelect = select('status', 'Status', statuses.map(function (key) { return [key, key === 'rejected' ? 'Rejected (opens the Recruitment Bin)' : STATUS_LABELS[key]]; }), params.get('status'));
             var emailSelect = select('email', 'Email', Object.keys(EMAIL_LABELS).map(function (key) { return [key, EMAIL_LABELS[key]]; }), params.get('email'));
+            // The role applied for. Its options are the roles that exist, refreshed with every load.
+            var roleSelect = can('recruitment') ? select('role', 'Applied for', params.get('role') ? [[params.get('role'), params.get('role')]] : [], params.get('role')) : null;
             var search = el('input', { type: 'search', name: 'q', value: params.get('q') || '', placeholder: 'Name, company, email, phone' });
             var searchLabel = el('label', {}, ['Search', search]);
             var apply = el('button', { type: 'submit', class: 'primary', text: 'Search' });
             var reset = el('a', { class: 'button', href: '/admin/enquiries', text: 'Reset' });
-            var filters = el('form', { class: 'filters' }, filter.nodes.concat([formSelect, statusSelect, emailSelect, searchLabel, el('div', { class: 'actions' }, [apply, reset])]));
+            var filters = el('form', { class: 'filters' }, filter.nodes.concat([formSelect, roleSelect, statusSelect, emailSelect, searchLabel, el('div', { class: 'actions' }, [apply, reset])].filter(Boolean)));
             filters.addEventListener('submit', function (event) { event.preventDefault(); page = 1; load(); });
 
             var note = el('p', { class: 'range-note' });
@@ -691,7 +696,7 @@
                 var query = new URLSearchParams();
                 if (value.from) query.set('from', value.from);
                 if (value.to) query.set('to', value.to);
-                [['form', formSelect], ['status', statusSelect], ['email', emailSelect]].forEach(function (pair) {
+                [['form', formSelect], ['role', roleSelect], ['status', statusSelect], ['email', emailSelect]].filter(function (pair) { return pair[1]; }).forEach(function (pair) {
                     var chosen = pair[1].querySelector('select').value;
                     if (chosen) query.set(pair[0], chosen);
                 });
@@ -723,19 +728,33 @@
             }
 
             function render(data) {
+                closeMenu();
                 clear(results);
+                syncRoleOptions(data.options.roles);
+                var formField = formSelect.querySelector('select');
+                var roleField = roleSelect && roleSelect.querySelector('select');
                 if (!data.items.length) {
-                    results.appendChild(el('div', { class: 'card' }, [el('p', { class: 'note', text: 'No enquiries match these filters.' })]));
+                    var empty = el('div', { class: 'card' }, [el('p', { class: 'note', text: 'No enquiries match these filters.' })]);
+                    if (formField.value || (roleField && roleField.value)) {
+                        var showAll = el('button', { type: 'button', text: 'Show every form and role' });
+                        showAll.addEventListener('click', function () {
+                            formField.value = '';
+                            if (roleField) roleField.value = '';
+                            page = 1;
+                            load();
+                        });
+                        empty.appendChild(showAll);
+                    }
+                    results.appendChild(empty);
                     return;
                 }
                 openEditor = null; // the previous list, and any editor in it, is gone
                 var body = el('tbody');
-                var headings = ['Submitted', 'Form', 'Name or company', 'Contact', 'Email'];
-                if (data.showAttachments) headings.push('Applied for');
+                var headings = ['Submitted', columnFilter('Form', formField, data.options.forms), 'Name or company', 'Contact'];
+                if (data.showAttachments) headings.push(roleField ? columnFilter('Applied for', roleField, data.options.roles) : 'Applied for');
                 headings.push('Status');
                 data.items.forEach(function (item) {
                     var detail = '/admin/enquiries/' + item.id;
-                    var emailCell = el('td', { 'data-label': 'Email' }, [badge(item.emailState, EMAIL_LABELS[item.emailState] || item.emailState)]);
                     var cells = [
                         el('td', { 'data-label': 'Submitted', title: formatTime(item.createdAt) }, [shortDate(item.createdAt), el('small', { text: shortTime(item.createdAt) })]),
                         el('td', { 'data-label': 'Form', text: item.formTitle }),
@@ -743,8 +762,7 @@
                         el('td', { 'data-label': 'Contact', class: 'contact-cell' }, [
                             item.phone ? copyButton(item.phone, 'Phone number') : '',
                             item.email ? copyButton(item.email, 'Email address') : ''
-                        ]),
-                        emailCell
+                        ])
                     ];
                     if (data.showAttachments) cells.push(appliedForCell(item));
                     var row = el('tr', {}, cells);
@@ -752,7 +770,9 @@
                     body.appendChild(row);
                 });
                 results.appendChild(el('table', {}, [
-                    el('thead', {}, [el('tr', {}, headings.map(function (heading) { return el('th', { scope: 'col', text: heading }); }))]),
+                    el('thead', {}, [el('tr', {}, headings.map(function (heading) {
+                        return typeof heading === 'string' ? el('th', { scope: 'col', text: heading }) : el('th', { scope: 'col', class: 'filter-heading' }, [heading]);
+                    }))]),
                     body
                 ]));
                 var first = (data.page - 1) * data.pageSize + 1;
@@ -765,6 +785,86 @@
             }
 
             function reloadList() { load(); }
+
+            // Keeps the Applied for options in step with the roles that exist, without losing the current choice.
+            function syncRoleOptions(roles) {
+                if (!roleSelect) return;
+                var field = roleSelect.querySelector('select');
+                var current = field.value;
+                clear(field).appendChild(el('option', { value: '', text: 'All' }));
+                roles.forEach(function (role) { field.appendChild(el('option', { value: role.value, text: role.label + ' (' + role.count + ')' })); });
+                if (current && !roles.some(function (role) { return role.value === current; })) field.appendChild(el('option', { value: current, text: current + ' (0)' }));
+                field.value = current;
+            }
+
+            // ---- filters in the column headings ----
+            // A heading button opens a short menu of the values that exist, with how many enquiries each shows. Choosing one
+            // sets the matching filter above the table (the headings are hidden on a phone, where those filters are used).
+            var openMenu = null;
+
+            function closeMenu() {
+                if (!openMenu) return;
+                openMenu.menu.remove();
+                openMenu.button.setAttribute('aria-expanded', 'false');
+                document.removeEventListener('mousedown', clickOutside, true);
+                window.removeEventListener('scroll', scrolled, true);
+                window.removeEventListener('resize', closeMenu);
+                openMenu = null;
+            }
+            function clickOutside(event) {
+                if (openMenu && !openMenu.menu.contains(event.target) && !openMenu.button.contains(event.target)) closeMenu();
+            }
+            function scrolled(event) {
+                if (openMenu && !openMenu.menu.contains(event.target)) closeMenu();
+            }
+
+            function columnFilter(label, field, options) {
+                var current = field.value;
+                var chosen = options.filter(function (option) { return option.value === current; })[0];
+                var shown = current ? (chosen ? chosen.label : current) : '';
+                var button = el('button', {
+                    type: 'button', class: 'column-filter' + (current ? ' active' : ''), 'aria-haspopup': 'true', 'aria-expanded': 'false',
+                    'aria-label': 'Filter by ' + label + (current ? ', showing ' + shown : ', showing all')
+                }, [label, current ? el('span', { class: 'column-filter-value', text: shown }) : '', el('span', { class: 'column-filter-arrow', 'aria-hidden': 'true', text: '▾' })]);
+                button.addEventListener('click', function () {
+                    if (openMenu && openMenu.button === button) { closeMenu(); return; }
+                    closeMenu();
+                    var menu = el('div', { class: 'column-filter-menu', role: 'menu', 'aria-label': 'Filter by ' + label });
+                    [{ value: '', label: 'All', count: null }].concat(options).forEach(function (option) {
+                        var item = el('button', { type: 'button', role: 'menuitemradio', class: 'column-filter-option', 'aria-checked': String(option.value === current) }, [
+                            el('span', { text: option.label }),
+                            option.count === null ? '' : el('span', { class: 'count', text: String(option.count) })
+                        ]);
+                        item.addEventListener('click', function () {
+                            closeMenu();
+                            field.value = option.value;
+                            page = 1;
+                            load();
+                        });
+                        menu.appendChild(item);
+                    });
+                    if (!options.length) menu.appendChild(el('p', { class: 'note', text: 'Nothing to choose from in this date range.' }));
+                    menu.addEventListener('keydown', function (event) {
+                        var items = Array.prototype.slice.call(menu.querySelectorAll('.column-filter-option'));
+                        var at = items.indexOf(document.activeElement);
+                        if (event.key === 'Escape') { event.preventDefault(); closeMenu(); button.focus(); }
+                        else if (event.key === 'ArrowDown') { event.preventDefault(); items[Math.min(at + 1, items.length - 1)].focus(); }
+                        else if (event.key === 'ArrowUp') { event.preventDefault(); items[Math.max(at - 1, 0)].focus(); }
+                        else if (event.key === 'Tab') closeMenu();
+                    });
+                    document.body.appendChild(menu);
+                    var place = button.getBoundingClientRect();
+                    menu.style.top = Math.round(place.bottom + 4) + 'px';
+                    menu.style.left = Math.round(Math.max(8, Math.min(place.left, window.innerWidth - menu.offsetWidth - 8))) + 'px';
+                    button.setAttribute('aria-expanded', 'true');
+                    openMenu = { button: button, menu: menu };
+                    document.addEventListener('mousedown', clickOutside, true);
+                    window.addEventListener('scroll', scrolled, true);
+                    window.addEventListener('resize', closeMenu);
+                    (menu.querySelector('[aria-checked="true"]') || menu.querySelector('.column-filter-option')).focus();
+                });
+                return button;
+            }
 
             // The position a recruitment applicant applied for, and their résumé.
             function appliedForCell(item) {
@@ -798,21 +898,25 @@
 
             function statusEditor(item, row, columns, trigger, showBadge) {
                 var statuses = item.formType === 'recruitment' ? Object.keys(STATUS_LABELS) : GENERAL_STATUSES;
+                var canDelete = item.formType !== 'recruitment';
                 var current = null;
                 var drafts = {};
                 var select = el('select', { disabled: true }, statuses.map(function (key) {
                     return el('option', { value: key, text: STATUS_LABELS[key] });
-                }));
+                }).concat(canDelete ? [el('option', { value: DELETE, text: 'Delete' })] : []));
                 var noteLabel = el('span', { text: 'Notes' });
                 var note = el('textarea', { rows: 3, maxlength: 2000, placeholder: 'Optional internal note', disabled: true });
                 var save = el('button', { type: 'submit', class: 'primary', text: 'Save', disabled: true });
                 var cancel = el('button', { type: 'button', text: 'Cancel' });
                 var message = el('p', { class: 'note', role: 'status', text: 'Loading…' });
                 var binHint = el('p', { class: 'note bin-hint', hidden: true, text: BIN_HINT });
+                var deleteHint = el('p', { class: 'note bin-hint delete-hint', hidden: true, text: DELETE_HINT });
+                var noteField = el('label', {}, [noteLabel, note]);
                 var panel = el('form', { class: 'status-editor', 'aria-label': 'Status and notes for ' + item.name }, [
                     el('label', {}, ['Status', select]),
                     binHint,
-                    el('label', {}, [noteLabel, note]),
+                    deleteHint,
+                    noteField,
                     el('div', { class: 'buttons' }, [save, cancel]),
                     message
                 ]);
@@ -828,10 +932,34 @@
                     return Boolean(current) && (select.value !== current.status || note.value.trim() !== savedNote());
                 }
                 function show() {
+                    var deleting = select.value === DELETE;
+                    noteField.hidden = deleting;
+                    deleteHint.hidden = !deleting;
+                    save.textContent = deleting ? 'Delete' : 'Save';
+                    save.classList.toggle('primary', !deleting);
+                    save.classList.toggle('danger-button', deleting);
+                    binHint.hidden = select.value !== 'rejected';
+                    if (deleting) { save.disabled = false; return; }
                     noteLabel.textContent = 'Notes for ' + STATUS_LABELS[select.value];
                     note.value = drafts[select.value] ?? savedNote();
                     save.disabled = !dirty();
-                    binHint.hidden = select.value !== 'rejected';
+                }
+                function deleteEnquiry() {
+                    if (!window.confirm('Delete the enquiry from ' + item.name + ' permanently? This cannot be undone.')) return;
+                    select.disabled = save.disabled = cancel.disabled = true;
+                    message.className = 'note';
+                    message.textContent = 'Deleting…';
+                    api('enquiry-delete', { method: 'POST', body: { id: item.id, expectedStatus: current.status } }).then(function (result) {
+                        if (!result.ok) {
+                            select.disabled = save.disabled = cancel.disabled = false;
+                            message.className = 'error';
+                            message.textContent = result.data.message || 'The enquiry could not be deleted.';
+                            return;
+                        }
+                        close(true);
+                        toast('Enquiry deleted');
+                        reloadList();
+                    });
                 }
                 // Returns false (and stays open) when there are unsaved changes the owner wants to keep.
                 function close(force) {
@@ -872,6 +1000,7 @@
                 panel.addEventListener('submit', function (event) {
                     event.preventDefault();
                     if (save.disabled) return;
+                    if (select.value === DELETE) { deleteEnquiry(); return; }
                     var statusChanged = select.value !== current.status;
                     select.disabled = note.disabled = save.disabled = cancel.disabled = true;
                     message.className = 'note';
@@ -1013,11 +1142,24 @@
                     });
                     return button;
                 });
+                if (enquiry.formType !== 'recruitment') {
+                    var deleteChoice = el('button', { type: 'button', text: 'Delete' });
+                    deleteChoice.addEventListener('click', function () {
+                        selected = DELETE;
+                        showSelection();
+                        message.textContent = '';
+                    });
+                    buttons.push(deleteChoice);
+                    statuses = statuses.concat([DELETE]);
+                }
                 var binHint = el('p', { class: 'note bin-hint', hidden: true, text: BIN_HINT });
+                var deleteHint = el('p', { class: 'note bin-hint delete-hint', hidden: true, text: DELETE_HINT });
+                var noteField = el('label', {}, [noteLabel, note]);
                 var form = el('form', { class: 'follow-up-form' }, [
                     el('div', { class: 'buttons' }, buttons),
                     binHint,
-                    el('label', {}, [noteLabel, note]),
+                    deleteHint,
+                    noteField,
                     el('div', { class: 'buttons' }, [save]),
                     message, changed
                 ]);
@@ -1030,6 +1172,17 @@
                     buttons.forEach(function (button, index) {
                         button.setAttribute('aria-pressed', String(statuses[index] === selected));
                     });
+                    var deleting = selected === DELETE;
+                    noteField.hidden = deleting;
+                    deleteHint.hidden = !deleting;
+                    save.textContent = deleting ? 'Delete enquiry' : 'Save follow-up';
+                    save.classList.toggle('primary', !deleting);
+                    save.classList.toggle('danger-button', deleting);
+                    if (deleting) {
+                        save.disabled = false;
+                        binHint.hidden = true;
+                        return;
+                    }
                     noteLabel.textContent = 'Notes for ' + STATUS_LABELS[selected];
                     note.value = noteDrafts[selected] ?? savedNote();
                     save.disabled = selected === enquiry.status && note.value.trim() === savedNote();
@@ -1044,9 +1197,31 @@
                     save.disabled = selected === enquiry.status && note.value.trim() === savedNote();
                     message.textContent = '';
                 });
+                function deleteEnquiry() {
+                    if (!window.confirm('Delete this enquiry permanently? This cannot be undone.')) return;
+                    save.disabled = true;
+                    buttons.forEach(function (button) { button.disabled = true; });
+                    message.className = 'follow-up-message note';
+                    message.textContent = 'Deleting…';
+                    api('enquiry-delete', { method: 'POST', body: { id: enquiry.id, expectedStatus: enquiry.status } }).then(function (result) {
+                        if (!result.ok) {
+                            save.disabled = false;
+                            buttons.forEach(function (button) { button.disabled = false; });
+                            message.className = 'follow-up-message error';
+                            message.textContent = result.data.message || 'The enquiry could not be deleted.';
+                            return;
+                        }
+                        noteDrafts = {};
+                        clear(holder).appendChild(el('div', { class: 'card' }, [
+                            el('p', { role: 'status', text: 'The enquiry was deleted.' }),
+                            el('a', { class: 'button', href: '/admin/enquiries', text: 'Back to Enquiries' })
+                        ]));
+                    });
+                }
                 form.addEventListener('submit', function (event) {
                     event.preventDefault();
                     if (save.disabled) return;
+                    if (selected === DELETE) { deleteEnquiry(); return; }
                     save.disabled = note.disabled = true;
                     buttons.forEach(function (button) { button.disabled = true; });
                     message.textContent = '';

@@ -116,13 +116,18 @@ function createHandler(overrides = {}) {
                 res.setHeader('Retry-After', String(WINDOW_SECONDS));
                 return respond(req, res, 429, 'Too many submissions from this connection. Please try again later or email info@agromaxx.in.');
             }
-            saved = await dependencies.save({ submissionKey, formType: body.formType, values: checked.values, sourcePage: sourcePage(req), resume: attachment.resume, openingId });
+            saved = await dependencies.save({
+                submissionKey, formType: body.formType, values: checked.values, sourcePage: sourcePage(req), resume: attachment.resume, openingId,
+                // A resume sent without choosing an opening is a general application.
+                generalApplication: body.formType === 'recruitment' && !openingId
+            });
         } catch (error) {
             console.error('Enquiry could not be saved', { code: error && error.code });
             return respond(req, res, 503, 'We could not save your enquiry right now. Please try again later or email info@agromaxx.in.');
         }
 
         if (saved.closedOpening) return respond(req, res, 409, 'This position is no longer open. Please return to Join Us to see available positions.');
+        if (saved.openingsAvailable) return respond(req, res, 409, 'We are hiring for specific positions right now. Please choose a role on the Join Us page and use Apply now.');
 
         // The enquiry is safe in the database. An email problem only changes the notification's state,
         // which staff can see and retry in the dashboard, so the visitor is still told it was received.

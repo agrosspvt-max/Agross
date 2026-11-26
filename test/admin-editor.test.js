@@ -88,3 +88,19 @@ test('the editor actions stay reachable', () => {
     assert.match(css, /\.sticky \{ position: sticky; bottom: 0/);
     for (const label of ['Save draft', 'Preview', 'Publish', 'Archive', 'Restore']) assert.ok(js.includes("text: '" + label) || js.includes("'" + label + "'"), label);
 });
+
+test('the enquiries table has no Email column and filters Form and Applied for from their headings', () => {
+    assert.doesNotMatch(js, /'Contact', 'Email'/);
+    assert.doesNotMatch(js, /data-label': 'Email'/);
+    assert.match(js, /columnFilter\('Form', formField, data\.options\.forms\)/);
+    assert.match(js, /columnFilter\('Applied for', roleField, data\.options\.roles\)/);
+    assert.match(js, /\['role', roleSelect\]/);
+    assert.match(css, /\.column-filter-menu \{ position: fixed;/);
+});
+
+test('Delete is offered with the statuses of non-recruitment enquiries only, and asks for confirmation', () => {
+    assert.match(js, /var canDelete = item\.formType !== 'recruitment';/);
+    assert.match(js, /if \(enquiry\.formType !== 'recruitment'\) \{\s+var deleteChoice/);
+    assert.equal((js.match(/window\.confirm\('Delete /g) || []).length, 2);
+    assert.equal((js.match(/api\('enquiry-delete'/g) || []).length, 2);
+});

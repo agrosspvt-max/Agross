@@ -665,7 +665,8 @@ test('recruitment resume stays private, survives a failed send, and is attached 
         assert.equal(list.body.items.length, query.form ? 2 : 3);
         assert.deepEqual(list.body.items.filter(item => item.hasResume).map(item => item.id), [row.enquiry_id]);
         // Each applicant shows the position they applied for; other forms have none.
-        assert.ok(list.body.items.filter(item => item.formType === 'recruitment').every(item => item.designation === 'Sales'));
+        // The applicant who used the public form with no opening is a general application; the seeded ones keep their role.
+        assert.deepEqual(list.body.items.filter(item => item.formType === 'recruitment').map(item => item.designation).sort(), ['General application', 'Sales']);
         assert.ok(list.body.items.filter(item => item.formType !== 'recruitment').every(item => item.designation === null));
         assert.ok(list.body.items.every(item => item.statusNotes === undefined), 'notes stay on the enquiry itself');
     }
@@ -878,4 +879,78 @@ test('an Unconfirmed email asks for confirmation before it is retried', async t 
     const confirmed = await call(admin, { method: 'POST', route: 'enquiry-retry', body: { id, confirm: true }, cookie, csrf });
     assert.equal(confirmed.statusCode, 200);
     assert.equal(send.mock.callCount(), 1);
+});
+
+test('the enquiries list filters by the role applied for and offers the forms and roles that exist', async t => {
+    if (!available) return t.skip('no test database');
+    await addEnquiry('recruitment', 'role-filter-a-0123456789', recruit(1));
+    await addEnquiry('recruitment', 'role-filter-b-0123456789', recruit(2));
+    await addEnquiry('recruitment', 'role-filter-c-0123456789', { ...recruit(3), profile: 'Research and Development' });
+    await addEnquiry('contact', 'role-filter-d-0123456789', contact(4));
+
+    await createUser({ username: 'hr', permissions: ['enquiries', 'recruitment'] });
+    const hr = await signIn('hr');
+    const all = (await call(admin, { route: 'enquiries', cookie: hr.cookie })).body;
+    assert.equal(all.total, 4);
+    assert.deepEqual(all.options.roles, [{ value: 'Sales', label: 'Sales', count: 2 }, { value: 'Research and Development', label: 'Research and Development', count: 1 }]);
+    const counts = Object.fromEntries(all.options.forms.map(option => [option.value, option.count]));
+    assert.equal(counts.recruitment, 3);
+    assert.equal(counts.contact, 1);
+    assert.ok(all.options.forms.every(option => typeof option.label === 'string' && option.label));
+
+    const sales = (await call(admin, { route: 'enquiries', query: { role: 'Sales' }, cookie: hr.cookie })).body;
+    assert.equal(sales.total, 2);
+    assert.ok(sales.items.every(item => item.designation === 'Sales'));
+    // The options ignore the form and role filters themselves, so another value can still be chosen.
+    assert.equal(sales.options.roles.length, 2);
+    assert.equal(sales.options.forms.find(option => option.value === 'contact').count, 1);
+    // Other filters still narrow the options.
+    assert.deepEqual((await call(admin, { route: 'enquiries', query: { q: 'Applicant 3' }, cookie: hr.cookie })).body.options.roles.map(r => r.value), ['Research and Development']);
+    assert.equal((await call(admin, { route: 'enquiries', query: { role: 'Sales', form: 'contact' }, cookie: hr.cookie })).body.total, 0);
+    assert.equal((await call(admin, { route: 'enquiries', query: { role: 'Nobody' }, cookie: hr.cookie })).body.total, 0);
+    assert.equal((await call(admin, { route: 'enquiries', query: { role: 'a\u0001b' }, cookie: hr.cookie })).statusCode, 400);
+    assert.equal((await call(admin, { route: 'enquiries', query: { role: 'x'.repeat(151) }, cookie: hr.cookie })).statusCode, 400);
+
+    // Without the recruitment permission no roles are offered and the role filter finds nothing it cannot see.
+    await createUser({ username: 'staff', permissions: ['enquiries'] });
+    const staff = await signIn('staff');
+    const staffList = (await call(admin, { route: 'enquiries', cookie: staff.cookie })).body;
+    assert.deepEqual(staffList.options.roles, []);
+    assert.ok(!staffList.options.forms.some(option => option.value === 'recruitment'));
+    assert.equal((await call(admin, { route: 'enquiries', query: { role: 'Sales' }, cookie: staff.cookie })).body.total, 0);
+});
+
+test('a General Contact, Dealership or Farming enquiry can be deleted for good; an application cannot', async t => {
+    if (!available) return t.skip('no test database');
+    const contactId = await addEnquiry('contact', 'delete-contact-0123456789', contact(1));
+    const keepId = await addEnquiry('contact', 'delete-keep-0123456789', contact(2));
+    const applicationId = await addEnquiry('recruitment', 'delete-recruit-0123456789', recruit(3));
+    await createUser();
+    const { cookie, csrf } = await signIn();
+    const remove = (id, extra = {}) => call(admin, { method: 'POST', route: 'enquiry-delete', body: { id, ...extra }, cookie, csrf });
+    const overviewTotal = async () => (await call(admin, { route: 'overview', query: { from: '2000-01-01', to: '2100-01-01' }, cookie })).body.total;
+    const before = await overviewTotal();
+
+    assert.equal((await call(admin, { method: 'POST', route: 'enquiry-delete', body: { id: contactId }, cookie })).statusCode, 403, 'needs the CSRF token');
+    assert.equal((await remove(contactId, { expectedStatus: 'resolved' })).statusCode, 409, 'refuses when the status changed meanwhile');
+    assert.equal((await remove(applicationId)).statusCode, 400);
+    assert.equal((await remove(contactId, { expectedStatus: 'new' })).statusCode, 200);
+
+    assert.equal((await db.query('SELECT count(*)::int n FROM enquiries WHERE id = $1', [contactId])).rows[0].n, 0);
+    assert.equal((await db.query('SELECT count(*)::int n FROM notification_jobs WHERE enquiry_id = $1', [contactId])).rows[0].n, 0);
+    assert.equal((await db.query('SELECT count(*)::int n FROM enquiries WHERE id = ANY($1)', [[keepId, applicationId]])).rows[0].n, 2);
+    assert.equal((await remove(contactId)).statusCode, 404, 'a second delete finds nothing');
+    assert.equal(await overviewTotal(), before, 'it still counts as received');
+    const log = (await db.query("SELECT metadata FROM audit_log WHERE action = 'enquiry_deleted' AND entity_id = $1", [contactId])).rows;
+    assert.equal(log.length, 1);
+    assert.doesNotMatch(JSON.stringify(log), /Person 1|p1@example/);
+
+    // Staff without the recruitment permission delete other forms, and cannot even find an application.
+    const dealerId = await addEnquiry('dealership', 'delete-dealer-0123456789', contact(4));
+    await createUser({ username: 'staff', permissions: ['enquiries'] });
+    const staff = await signIn('staff');
+    const staffRemove = id => call(admin, { method: 'POST', route: 'enquiry-delete', body: { id }, cookie: staff.cookie, csrf: staff.csrf });
+    assert.equal((await staffRemove(applicationId)).statusCode, 404);
+    assert.equal((await staffRemove(dealerId)).statusCode, 200);
+    assert.equal((await db.query('SELECT count(*)::int n FROM enquiries WHERE id = $1', [dealerId])).rows[0].n, 0);
 });

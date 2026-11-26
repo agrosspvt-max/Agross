@@ -161,8 +161,32 @@
     var notice = document.querySelector('[data-careers-application-status]');
     var params = new URLSearchParams(window.location.search);
     if (!params.has('opening')) {
-        notice.hidden = true;
-        form.hidden = false;
+        // The general form is only for when nothing is open. If any position is live, applicants choose it on Join Us.
+        // (The server refuses a general application at that point too, so a saved link cannot get around this.)
+        notice.textContent = 'Checking current openings…';
+        fetch('/api/openings', { headers: { Accept: 'application/json' } })
+            .then(function (response) {
+                if (!response.ok) throw new Error();
+                return response.json();
+            })
+            .then(function (data) {
+                if (data.openings.length) {
+                    notice.textContent = 'We are hiring for specific positions right now. Please choose a role and use Apply now on the ';
+                    var join = element('a', '', 'Join Us page');
+                    join.href = '/joinus.html#allpositions';
+                    notice.append(join, '.');
+                    return;
+                }
+                var role = form.querySelector('[data-careers-role]');
+                form.querySelector('[data-careers-profile]').hidden = true;
+                role.textContent = 'General application';
+                role.hidden = false;
+                notice.hidden = true;
+                form.hidden = false;
+            })
+            .catch(function () {
+                notice.textContent = 'We couldn’t check current openings. Please refresh the page to try again.';
+            });
         return;
     }
 

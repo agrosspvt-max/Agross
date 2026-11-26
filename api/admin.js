@@ -131,7 +131,7 @@ async function route(req, res, name) {
         if (!session) return null;
         const parsed = inbox.parseFilters({
             from: first(params.from), to: first(params.to), form: first(params.form),
-            status: first(params.status), email: first(params.email), q: first(params.q)
+            status: first(params.status), email: first(params.email), q: first(params.q), role: first(params.role)
         });
         if (parsed.error) return sendError(res, 400, parsed.error);
         await notify.sweepStale();
@@ -172,6 +172,17 @@ async function route(req, res, name) {
         const result = await inbox.setStatus(body.id, body.status, session.user, { note: body.note, expectedStatus: body.expectedStatus });
         if (!result.ok) return sendError(res, result.status, result.message, result.code ? { code: result.code } : {});
         return res.status(200).json({ ok: true, followUp: result.followUp });
+    }
+
+    if (name === 'enquiry-delete') {
+        if (method !== 'POST') return methodNotAllowed(res, 'POST');
+        const session = await authenticate(req, res, { permission: 'enquiries' });
+        if (!session) return null;
+        const body = jsonBody(req);
+        if (!body || !UUID.test(String(body.id))) return sendError(res, 400, 'Choose an enquiry.');
+        const result = await inbox.deleteEnquiry(body.id, session.user, { expectedStatus: body.expectedStatus });
+        if (!result.ok) return sendError(res, result.status, result.message);
+        return res.status(200).json({ ok: true });
     }
 
     // The Recruitment Bin: staff who can read applications and have the recruitment permission.

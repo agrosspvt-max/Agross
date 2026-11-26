@@ -62,7 +62,9 @@ for (const type of Object.keys(examples)) {
         const rows = (await db.query('SELECT * FROM enquiries')).rows;
         assert.equal(rows.length, 1);
         assert.equal(rows[0].form_type, type);
-        assert.deepEqual(rows[0].fields, examples[type]);
+        // A resume sent without choosing an opening is a general application: the role is set by the server, not the form.
+        const expected = type === 'recruitment' ? { ...examples[type], profile: 'General application' } : examples[type];
+        assert.deepEqual(rows[0].fields, expected);
         assert.equal(rows[0].status, 'new');
         assert.equal(rows[0].source_page, '/contact.html'); // query string is never kept
         assert.equal(rows[0].email, examples[type].email);
@@ -76,7 +78,7 @@ for (const type of Object.keys(examples)) {
         assert.equal(email.sender.email, 'verified@example.com');
         assert.equal(email.replyTo.email, examples[type].email);
         assert.equal(email.subject, subjects[type]);
-        for (const value of Object.values(examples[type])) assert.ok(email.textContent.includes(value));
+        for (const value of Object.values(expected)) assert.ok(email.textContent.includes(value));
 
         const saved = await job();
         assert.equal(saved.state, 'accepted');
