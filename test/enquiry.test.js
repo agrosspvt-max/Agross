@@ -60,6 +60,11 @@ for (const type of Object.keys(examples)) {
     test(type + ' saves every field once and then attempts the notification', async () => {
         const { calls, handler } = setup();
         const req = request(type);
+        if (type === 'recruitment') {
+            // Every application carries its PDF resume.
+            req.headers['content-type'] = 'application/json';
+            req.body.resume = { name: 'cv.pdf', content: Buffer.from('%PDF-1.7\n%%EOF\n').toString('base64') };
+        }
         // Client-supplied recipients and senders are never used.
         req.body.to = 'untrusted@example.com';
         req.body.sender = 'untrusted@example.com';
@@ -145,6 +150,25 @@ test('only recruitment accepts a PDF resume, with a 2 MB limit', async () => {
     }
     assert.equal(calls.save.length, 0);
     assert.equal(calls.deliver.length, 0);
+});
+
+test('an application without a PDF resume is refused and nothing is saved', async () => {
+    const { calls, handler } = setup();
+    for (const [contentType, resume] of [['application/x-www-form-urlencoded', undefined], ['application/x-www-form-urlencoded', ''], ['application/json', null]]) {
+        const req = request('recruitment');
+        req.headers['content-type'] = contentType;
+        if (resume !== undefined) req.body.resume = resume;
+        const res = response();
+        await handler(req, res);
+        assert.equal(res.statusCode, 400);
+        assert.match(res.body.message, /attach your resume as a PDF/);
+    }
+    // The other forms still need no attachment.
+    const contact = response();
+    await handler(request('contact'), contact);
+    assert.equal(contact.statusCode, 200);
+    assert.equal(calls.save.length, 1);
+    assert.equal(calls.save[0].formType, 'contact');
 });
 
 test('unknown or inherited form types and malformed bodies are rejected', async () => {

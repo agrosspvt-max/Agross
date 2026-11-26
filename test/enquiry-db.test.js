@@ -32,7 +32,7 @@ const subjects = { contact: 'Contact Us Request', dealership: 'Dealership Reques
 function submission(type, key, extra = {}) {
     return {
         method: 'POST',
-        headers: { host: 'www.agross.in', origin: 'https://www.agross.in', 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json', referer: 'https://www.agross.in/contact.html?secret=1' },
+        headers: { host: 'www.agross.in', origin: 'https://www.agross.in', 'content-type': extra.resume ? 'application/json' : 'application/x-www-form-urlencoded', accept: 'application/json', referer: 'https://www.agross.in/contact.html?secret=1' },
         body: { formType: type, fax: '', submissionKey: key, ...examples[type], ...extra }
     };
 }
@@ -55,7 +55,8 @@ for (const type of Object.keys(examples)) {
     test(type + ' form: one saved record with every field, one notification to info@agromaxx.in with the visitor as Reply-To', async t => {
         if (!available) return t.skip('no test database');
         const send = brevo();
-        const res = await submit(type, 'key-' + type + '-0123456789');
+        // Every application carries its PDF resume.
+        const res = await submit(type, 'key-' + type + '-0123456789', type === 'recruitment' ? { resume: { name: 'cv.pdf', content: Buffer.from('%PDF-1.7\n%%EOF\n').toString('base64') } } : undefined);
         assert.equal(res.statusCode, 200);
         assert.equal(res.body.redirect, '/thankyou.html');
 

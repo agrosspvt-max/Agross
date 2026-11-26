@@ -107,3 +107,11 @@ test('other forms are not affected, and the Form-4 page offers only the general 
     const select = /<select name="profile"[\s\S]*?<\/select>/.exec(page)[0];
     assert.deepEqual([...select.matchAll(/<option[^>]*>([^<]*)<\/option>/g)].map(match => match[1]), ['General application']);
 });
+
+test('the application form asks for the PDF resume before sending', () => {
+    const page = fs.readFileSync(path.join(__dirname, '..', 'Form-4.html'), 'utf8');
+    const input = /<input id="recruitment-resume"[^>]*>/.exec(page)[0];
+    assert.match(input, /\srequired[\s>]/);
+    assert.match(input, /accept="\.pdf,application\/pdf"/);
+    assert.doesNotMatch(page, /Resume \(optional\)/);
+});
