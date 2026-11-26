@@ -244,3 +244,29 @@ details.management[open] > summary::before { transform: rotate(90deg); }
 button.danger-button { background: #b42318; border-color: #b42318; color: #fff; }
 button.danger-button:hover, button.danger-button:focus-visible { background: #912018; border-color: #912018; }
 .delete-hint { color: #b42318; }
+
+/* enquiries: filter panels opened from the headings, and the line above the table */
+.column-filter-form { display: grid; gap: .6rem; padding: .5rem; min-width: 240px; }
+.column-filter-form input[type="search"] { width: 100%; }
+.column-filter-form .buttons { display: flex; gap: .5rem; }
+.column-filter-form .error { margin: 0; }
+a.column-filter-option { text-decoration: none; border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; margin-top: .2rem; }
+.range-note .filter-chip { margin-left: .6rem; padding: .15rem .55rem; border: 1px solid var(--green); background: #e3f3ee; color: var(--green-dark); border-radius: 999px; font: inherit; font-size: .85rem; cursor: pointer; }
+.range-note .clear-filters { margin-left: .75rem; }
+.inbox-table .empty-cell { padding: 1.25rem .75rem; }
+.inbox-table .empty-cell .note { margin: 0 0 .6rem; }
+@media (max-width: 760px) {
+    /* On a phone the headings become a row of filter buttons above the cards. */
+    .inbox-table thead { display: block; margin-bottom: .75rem; }
+    .inbox-table thead tr { display: flex; flex-wrap: wrap; gap: .4rem; background: transparent; border: 0; padding: 0; margin: 0; }
+    .inbox-table thead th { display: block; border: 0; padding: 0; }
+    .inbox-table .column-filter { margin-left: 0; border-color: var(--line); background: var(--card); min-height: 44px; padding: .35rem .7rem; }
+    .inbox-table .column-filter.active { border-color: var(--green); background: #e3f3ee; }
+    .inbox-table .column-filter-value { max-width: 9em; }
+    .inbox-table .empty-cell { padding: .75rem; }
+}
+
+/* A chosen value sits on its own short line under the heading name, so it never widens the table. */
+.inbox-table .column-filter { display: inline-grid; justify-items: start; gap: .1rem; white-space: normal; }
+.inbox-table .column-filter-label { white-space: nowrap; }
+.inbox-table .column-filter-value { display: block; max-width: 10em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

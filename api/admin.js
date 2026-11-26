@@ -131,7 +131,8 @@ async function route(req, res, name) {
         if (!session) return null;
         const parsed = inbox.parseFilters({
             from: first(params.from), to: first(params.to), form: first(params.form),
-            status: first(params.status), email: first(params.email), q: first(params.q), role: first(params.role)
+            status: first(params.status), email: first(params.email), q: first(params.q), role: first(params.role),
+            name: first(params.name), contact: first(params.contact)
         });
         if (parsed.error) return sendError(res, 400, parsed.error);
         await notify.sweepStale();

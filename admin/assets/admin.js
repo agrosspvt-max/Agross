@@ -656,65 +656,67 @@
             var page = Math.max(1, Number(params.get('page')) || 1);
             var latestLoad = 0;
 
-            function select(name, label, options, current) {
-                var node = el('select', { name: name }, [el('option', { value: '', text: 'All' })].concat(options.map(function (item) {
-                    return el('option', { value: item[0], text: item[1] });
-                })));
-                node.value = current || '';
-                node.addEventListener('change', function () {
-                    if (name === 'status' && node.value === 'rejected') { window.location.assign('/admin/bin'); return; }
-                    page = 1;
-                    load();
-                });
-                return el('label', {}, [label, node]);
-            }
-
-            var filter = dateFilter(from, to, function () { page = 1; load(); });
-            var formSelect = select('form', 'Form', FORM_TYPES, params.get('form'));
-            var statuses = can('recruitment') ? Object.keys(STATUS_LABELS) : GENERAL_STATUSES;
-            var statusSelect = select('status', 'Status', statuses.map(function (key) { return [key, key === 'rejected' ? 'Rejected (opens the Recruitment Bin)' : STATUS_LABELS[key]]; }), params.get('status'));
-            var emailSelect = select('email', 'Email', Object.keys(EMAIL_LABELS).map(function (key) { return [key, EMAIL_LABELS[key]]; }), params.get('email'));
-            // The role applied for. Its options are the roles that exist, refreshed with every load.
-            var roleSelect = can('recruitment') ? select('role', 'Applied for', params.get('role') ? [[params.get('role'), params.get('role')]] : [], params.get('role')) : null;
-            var search = el('input', { type: 'search', name: 'q', value: params.get('q') || '', placeholder: 'Name, company, email, phone' });
-            var searchLabel = el('label', {}, ['Search', search]);
-            var apply = el('button', { type: 'submit', class: 'primary', text: 'Search' });
-            var reset = el('a', { class: 'button', href: '/admin/enquiries', text: 'Reset' });
-            var filters = el('form', { class: 'filters' }, filter.nodes.concat([formSelect, roleSelect, statusSelect, emailSelect, searchLabel, el('div', { class: 'actions' }, [apply, reset])].filter(Boolean)));
-            filters.addEventListener('submit', function (event) { event.preventDefault(); page = 1; load(); });
-
+            // Every filter is set from its column heading; the values are kept here and in the address bar.
+            // Email and q have no heading: a link (from the Overview, say) can still set them, and they are shown above the table.
+            var state = {
+                from: from, to: to,
+                form: params.get('form') || '', role: params.get('role') || '', status: params.get('status') || '',
+                name: params.get('name') || '', contact: params.get('contact') || '',
+                email: params.get('email') || '', q: params.get('q') || ''
+            };
+            var FILTER_KEYS = ['from', 'to', 'form', 'role', 'status', 'name', 'contact', 'email', 'q'];
             var note = el('p', { class: 'range-note' });
             var results = el('div', {});
             clear(main);
             main.appendChild(el('h1', { text: 'Enquiries' }));
-            main.appendChild(filters);
             main.appendChild(note);
             main.appendChild(results);
 
+            function setFilter(changes) {
+                closeMenu();
+                Object.keys(changes).forEach(function (key) { state[key] = changes[key]; });
+                page = 1;
+                load();
+            }
+
             function currentQuery() {
-                var value = filter.value();
                 var query = new URLSearchParams();
-                if (value.from) query.set('from', value.from);
-                if (value.to) query.set('to', value.to);
-                [['form', formSelect], ['role', roleSelect], ['status', statusSelect], ['email', emailSelect]].filter(function (pair) { return pair[1]; }).forEach(function (pair) {
-                    var chosen = pair[1].querySelector('select').value;
-                    if (chosen) query.set(pair[0], chosen);
-                });
-                if (search.value.trim()) query.set('q', search.value.trim());
+                FILTER_KEYS.forEach(function (key) { if (state[key]) query.set(key, state[key]); });
+                // All dates: an empty From is kept so the choice survives a reload (no dates at all means the last 30 days).
+                if (!state.from && !state.to) query.set('from', '');
                 return query;
+            }
+
+            function isFiltered() {
+                var defaults = presetRange('30');
+                return ['form', 'role', 'status', 'name', 'contact', 'email', 'q'].some(function (key) { return state[key]; }) ||
+                    state.from !== defaults.from || state.to !== defaults.to;
+            }
+
+            function showNote() {
+                clear(note).appendChild(document.createTextNode(state.from ? rangeText(state.from, state.to || state.from) : 'Showing all dates.'));
+                var extras = [];
+                if (state.email) extras.push(['email', 'Email: ' + (EMAIL_LABELS[state.email] || state.email)]);
+                if (state.q) extras.push(['q', 'Search: ' + state.q]);
+                extras.forEach(function (pair) {
+                    var chip = el('button', { type: 'button', class: 'filter-chip', 'aria-label': 'Remove the filter ' + pair[1] }, [pair[1], el('span', { 'aria-hidden': 'true', text: ' ×' })]);
+                    chip.addEventListener('click', function () { var change = {}; change[pair[0]] = ''; setFilter(change); });
+                    note.appendChild(chip);
+                });
+                if (isFiltered()) note.appendChild(el('a', { class: 'clear-filters', href: '/admin/enquiries', text: 'Clear all filters' }));
             }
 
             function load() {
                 var loadId = ++latestLoad;
-                var query = currentQuery();
-                if (query.get('from') && query.get('to') && query.get('from') > query.get('to')) {
+                if (state.from && state.to && state.from > state.to) {
                     showError(results, 'Choose a start date that is not after the end date.');
                     return;
                 }
+                var query = currentQuery();
                 var shown = new URLSearchParams(query);
                 if (page > 1) shown.set('page', String(page));
                 window.history.replaceState(null, '', '/admin/enquiries' + (shown.toString() ? '?' + shown.toString() : ''));
-                note.textContent = query.get('from') ? rangeText(query.get('from'), query.get('to') || query.get('from')) : 'Showing all dates.';
+                showNote();
                 query.set('page', String(page));
                 clear(results).appendChild(el('p', { class: 'note', text: 'Loading…' }));
                 api('enquiries?' + query.toString()).then(function (result) {
@@ -730,29 +732,22 @@
             function render(data) {
                 closeMenu();
                 clear(results);
-                syncRoleOptions(data.options.roles);
-                var formField = formSelect.querySelector('select');
-                var roleField = roleSelect && roleSelect.querySelector('select');
-                if (!data.items.length) {
-                    var empty = el('div', { class: 'card' }, [el('p', { class: 'note', text: 'No enquiries match these filters.' })]);
-                    if (formField.value || (roleField && roleField.value)) {
-                        var showAll = el('button', { type: 'button', text: 'Show every form and role' });
-                        showAll.addEventListener('click', function () {
-                            formField.value = '';
-                            if (roleField) roleField.value = '';
-                            page = 1;
-                            load();
-                        });
-                        empty.appendChild(showAll);
-                    }
-                    results.appendChild(empty);
-                    return;
-                }
                 openEditor = null; // the previous list, and any editor in it, is gone
+                var options = data.options;
+                var showRole = can('recruitment') && (data.showAttachments || Boolean(state.role));
+                var defaultDates = presetRange('30');
+                var datesChanged = state.from !== defaultDates.from || state.to !== defaultDates.to;
+                var headings = [
+                    // The usual last 30 days are not spelled out in the heading; the line above the table says them.
+                    headingFilter('Submitted', datesChanged ? dateText() : '', datesChanged, dateMenu),
+                    headingFilter('Form', labelOf(options.forms, state.form), Boolean(state.form), function (menu) { listMenu(menu, options.forms, 'form'); }),
+                    headingFilter('Name or company', state.name, Boolean(state.name), function (menu) { searchMenu(menu, 'name', 'Name or company'); }),
+                    headingFilter('Contact', state.contact, Boolean(state.contact), function (menu) { searchMenu(menu, 'contact', 'Phone number or email'); })
+                ];
+                if (showRole) headings.push(headingFilter('Applied for', state.role, Boolean(state.role), function (menu) { listMenu(menu, options.roles, 'role'); }));
+                headings.push(headingFilter('Status', state.status ? STATUS_LABELS[state.status] || state.status : '', Boolean(state.status), function (menu) { statusMenu(menu, options.statuses); }));
+
                 var body = el('tbody');
-                var headings = ['Submitted', columnFilter('Form', formField, data.options.forms), 'Name or company', 'Contact'];
-                if (data.showAttachments) headings.push(roleField ? columnFilter('Applied for', roleField, data.options.roles) : 'Applied for');
-                headings.push('Status');
                 data.items.forEach(function (item) {
                     var detail = '/admin/enquiries/' + item.id;
                     var cells = [
@@ -764,17 +759,24 @@
                             item.email ? copyButton(item.email, 'Email address') : ''
                         ])
                     ];
-                    if (data.showAttachments) cells.push(appliedForCell(item));
+                    if (showRole) cells.push(appliedForCell(item));
                     var row = el('tr', {}, cells);
                     row.appendChild(statusCell(item, row, headings.length));
                     body.appendChild(row);
                 });
-                results.appendChild(el('table', {}, [
+                if (!data.items.length) {
+                    // The headings stay, so the filters that found nothing can be changed right here.
+                    var cell = el('td', { colspan: headings.length, class: 'empty-cell' }, [el('p', { class: 'note', text: 'No enquiries match these filters.' })]);
+                    if (isFiltered()) cell.appendChild(el('a', { class: 'button', href: '/admin/enquiries', text: 'Clear all filters' }));
+                    body.appendChild(el('tr', {}, [cell]));
+                }
+                results.appendChild(el('table', { class: 'inbox-table' }, [
                     el('thead', {}, [el('tr', {}, headings.map(function (heading) {
-                        return typeof heading === 'string' ? el('th', { scope: 'col', text: heading }) : el('th', { scope: 'col', class: 'filter-heading' }, [heading]);
+                        return el('th', { scope: 'col', class: 'filter-heading' }, [heading]);
                     }))]),
                     body
                 ]));
+                if (!data.items.length) return;
                 var first = (data.page - 1) * data.pageSize + 1;
                 var last = first + data.items.length - 1;
                 var prev = el('button', { type: 'button', text: 'Previous', disabled: data.page <= 1 });
@@ -786,20 +788,29 @@
 
             function reloadList() { load(); }
 
-            // Keeps the Applied for options in step with the roles that exist, without losing the current choice.
-            function syncRoleOptions(roles) {
-                if (!roleSelect) return;
-                var field = roleSelect.querySelector('select');
-                var current = field.value;
-                clear(field).appendChild(el('option', { value: '', text: 'All' }));
-                roles.forEach(function (role) { field.appendChild(el('option', { value: role.value, text: role.label + ' (' + role.count + ')' })); });
-                if (current && !roles.some(function (role) { return role.value === current; })) field.appendChild(el('option', { value: current, text: current + ' (0)' }));
-                field.value = current;
+            function labelOf(options, value) {
+                if (!value) return '';
+                var found = options.filter(function (option) { return option.value === value; })[0];
+                return found ? found.label : value;
+            }
+
+            var dayFormat = new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' });
+            function dayText(value) { return dayFormat.format(new Date(value + 'T00:00:00Z')); }
+            function dateText() {
+                if (!state.from && !state.to) return 'All dates';
+                var preset = presetFor(state.from, state.to);
+                if (preset === 'today') return 'Today';
+                if (preset === '7') return 'Last 7 days';
+                if (preset === '30') return 'Last 30 days';
+                if (!state.to || state.from === state.to) return dayText(state.from || state.to);
+                if (!state.from) return 'Until ' + dayText(state.to);
+                return dayText(state.from) + ' – ' + dayText(state.to);
             }
 
             // ---- filters in the column headings ----
-            // A heading button opens a short menu of the values that exist, with how many enquiries each shows. Choosing one
-            // sets the matching filter above the table (the headings are hidden on a phone, where those filters are used).
+            // Each heading is a button that opens a small panel under it: a list to choose from (with how many enquiries
+            // each choice shows), a search box, or the dates. The panel is placed on the page, not in the table, so the
+            // table's rounded corners never cut it off. On a phone the headings show as a row of buttons above the cards.
             var openMenu = null;
 
             function closeMenu() {
@@ -807,63 +818,145 @@
                 openMenu.menu.remove();
                 openMenu.button.setAttribute('aria-expanded', 'false');
                 document.removeEventListener('mousedown', clickOutside, true);
-                window.removeEventListener('scroll', scrolled, true);
-                window.removeEventListener('resize', closeMenu);
+                document.removeEventListener('touchstart', clickOutside, true);
+                window.removeEventListener('scroll', placeMenu, true);
+                window.removeEventListener('resize', placeMenu);
                 openMenu = null;
             }
             function clickOutside(event) {
                 if (openMenu && !openMenu.menu.contains(event.target) && !openMenu.button.contains(event.target)) closeMenu();
             }
-            function scrolled(event) {
-                if (openMenu && !openMenu.menu.contains(event.target)) closeMenu();
+            function placeMenu() {
+                if (!openMenu) return;
+                var place = openMenu.button.getBoundingClientRect();
+                var menu = openMenu.menu;
+                menu.style.top = Math.round(Math.min(place.bottom + 4, Math.max(8, window.innerHeight - menu.offsetHeight - 8))) + 'px';
+                menu.style.left = Math.round(Math.max(8, Math.min(place.left, window.innerWidth - menu.offsetWidth - 8))) + 'px';
             }
 
-            function columnFilter(label, field, options) {
-                var current = field.value;
-                var chosen = options.filter(function (option) { return option.value === current; })[0];
-                var shown = current ? (chosen ? chosen.label : current) : '';
+            function headingFilter(label, valueText, active, build) {
                 var button = el('button', {
-                    type: 'button', class: 'column-filter' + (current ? ' active' : ''), 'aria-haspopup': 'true', 'aria-expanded': 'false',
-                    'aria-label': 'Filter by ' + label + (current ? ', showing ' + shown : ', showing all')
-                }, [label, current ? el('span', { class: 'column-filter-value', text: shown }) : '', el('span', { class: 'column-filter-arrow', 'aria-hidden': 'true', text: '▾' })]);
+                    type: 'button', class: 'column-filter' + (active ? ' active' : ''), 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
+                    'aria-label': label + (valueText ? ': ' + valueText : '') + '. Filter by ' + label
+                }, [
+                    el('span', { class: 'column-filter-label' }, [label, el('span', { class: 'column-filter-arrow', 'aria-hidden': 'true', text: ' ▾' })]),
+                    valueText ? el('span', { class: 'column-filter-value', text: valueText, title: valueText }) : ''
+                ]);
                 button.addEventListener('click', function () {
                     if (openMenu && openMenu.button === button) { closeMenu(); return; }
                     closeMenu();
-                    var menu = el('div', { class: 'column-filter-menu', role: 'menu', 'aria-label': 'Filter by ' + label });
-                    [{ value: '', label: 'All', count: null }].concat(options).forEach(function (option) {
-                        var item = el('button', { type: 'button', role: 'menuitemradio', class: 'column-filter-option', 'aria-checked': String(option.value === current) }, [
-                            el('span', { text: option.label }),
-                            option.count === null ? '' : el('span', { class: 'count', text: String(option.count) })
-                        ]);
-                        item.addEventListener('click', function () {
-                            closeMenu();
-                            field.value = option.value;
-                            page = 1;
-                            load();
-                        });
-                        menu.appendChild(item);
-                    });
-                    if (!options.length) menu.appendChild(el('p', { class: 'note', text: 'Nothing to choose from in this date range.' }));
+                    var menu = el('div', { class: 'column-filter-menu', role: 'dialog', 'aria-label': 'Filter by ' + label });
+                    build(menu);
                     menu.addEventListener('keydown', function (event) {
+                        if (event.key === 'Escape') { event.preventDefault(); closeMenu(); button.focus(); return; }
                         var items = Array.prototype.slice.call(menu.querySelectorAll('.column-filter-option'));
                         var at = items.indexOf(document.activeElement);
-                        if (event.key === 'Escape') { event.preventDefault(); closeMenu(); button.focus(); }
-                        else if (event.key === 'ArrowDown') { event.preventDefault(); items[Math.min(at + 1, items.length - 1)].focus(); }
+                        if (at < 0) return;
+                        if (event.key === 'ArrowDown') { event.preventDefault(); items[Math.min(at + 1, items.length - 1)].focus(); }
                         else if (event.key === 'ArrowUp') { event.preventDefault(); items[Math.max(at - 1, 0)].focus(); }
-                        else if (event.key === 'Tab') closeMenu();
+                    });
+                    menu.addEventListener('focusout', function (event) {
+                        if (event.relatedTarget && !menu.contains(event.relatedTarget) && event.relatedTarget !== button) closeMenu();
                     });
                     document.body.appendChild(menu);
-                    var place = button.getBoundingClientRect();
-                    menu.style.top = Math.round(place.bottom + 4) + 'px';
-                    menu.style.left = Math.round(Math.max(8, Math.min(place.left, window.innerWidth - menu.offsetWidth - 8))) + 'px';
                     button.setAttribute('aria-expanded', 'true');
                     openMenu = { button: button, menu: menu };
+                    placeMenu();
                     document.addEventListener('mousedown', clickOutside, true);
-                    window.addEventListener('scroll', scrolled, true);
-                    window.addEventListener('resize', closeMenu);
-                    (menu.querySelector('[aria-checked="true"]') || menu.querySelector('.column-filter-option')).focus();
+                    document.addEventListener('touchstart', clickOutside, true);
+                    window.addEventListener('scroll', placeMenu, true);
+                    window.addEventListener('resize', placeMenu);
+                    var focus = menu.querySelector('input:not([disabled]), select, [aria-checked="true"]') || menu.querySelector('.column-filter-option');
+                    if (focus) focus.focus();
                 });
                 return button;
+            }
+
+            // A list of values with counts. Choosing a form other than Recruitment also drops the Applied for choice.
+            function listMenu(menu, options, key) {
+                [{ value: '', label: 'All', count: null }].concat(options).forEach(function (option) {
+                    var item = el('button', { type: 'button', role: 'menuitemradio', class: 'column-filter-option', 'aria-checked': String(option.value === state[key]) }, [
+                        el('span', { text: option.label }),
+                        option.count === null ? '' : el('span', { class: 'count', text: String(option.count) })
+                    ]);
+                    item.addEventListener('click', function () {
+                        var change = {};
+                        change[key] = option.value;
+                        if (key === 'form' && option.value && option.value !== 'recruitment') change.role = '';
+                        setFilter(change);
+                    });
+                    menu.appendChild(item);
+                });
+                if (!options.length) menu.appendChild(el('p', { class: 'note', text: 'Nothing to choose from with these filters.' }));
+            }
+
+            function statusMenu(menu, statuses) {
+                listMenu(menu, statuses.map(function (status) { return { value: status.value, label: STATUS_LABELS[status.value] || status.value, count: status.count }; }), 'status');
+                if (can('recruitment')) {
+                    menu.appendChild(el('a', { class: 'column-filter-option', href: '/admin/bin' }, [el('span', { text: 'Rejected' }), el('span', { class: 'count', text: 'Recruitment Bin' })]));
+                }
+            }
+
+            function searchMenu(menu, key, label) {
+                var input = el('input', { type: 'search', value: state[key], placeholder: label, maxlength: 100, 'aria-label': 'Search by ' + label });
+                var buttons = [el('button', { type: 'submit', class: 'primary', text: 'Search' })];
+                if (state[key]) {
+                    var clearButton = el('button', { type: 'button', text: 'Clear' });
+                    clearButton.addEventListener('click', function () { var change = {}; change[key] = ''; setFilter(change); });
+                    buttons.push(clearButton);
+                }
+                var form = el('form', { class: 'column-filter-form' }, [input, el('div', { class: 'buttons' }, buttons)]);
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    var change = {};
+                    change[key] = input.value.trim();
+                    setFilter(change);
+                });
+                menu.appendChild(form);
+            }
+
+            // Today, Last 7 days and Last 30 days apply at once; a custom range applies with Show.
+            function dateMenu(menu) {
+                var preset = el('select', { 'aria-label': 'Date range' }, [
+                    el('option', { value: 'today', text: 'Today' }), el('option', { value: '7', text: 'Last 7 days' }),
+                    el('option', { value: '30', text: 'Last 30 days' }), el('option', { value: 'all', text: 'All dates' }),
+                    el('option', { value: 'custom', text: 'Custom range' })
+                ]);
+                var fromInput = el('input', { type: 'date', value: state.from });
+                var toInput = el('input', { type: 'date', value: state.to });
+                var show = el('button', { type: 'submit', class: 'primary', text: 'Show' });
+                var problem = el('p', { class: 'error', role: 'alert', hidden: true });
+                preset.value = !state.from && !state.to ? 'all' : presetFor(state.from, state.to);
+                function sync() {
+                    var custom = preset.value === 'custom';
+                    fromInput.disabled = toInput.disabled = show.disabled = !custom;
+                    if (preset.value === 'all') { fromInput.value = toInput.value = ''; }
+                    else if (!custom) {
+                        var range = presetRange(preset.value);
+                        fromInput.value = range.from;
+                        toInput.value = range.to;
+                    }
+                }
+                preset.addEventListener('change', function () {
+                    sync();
+                    if (preset.value === 'custom') { fromInput.focus(); return; }
+                    setFilter({ from: fromInput.value, to: toInput.value });
+                });
+                var form = el('form', { class: 'column-filter-form' }, [
+                    el('label', {}, ['Dates', preset]),
+                    el('label', {}, ['From', fromInput]),
+                    el('label', {}, ['To', toInput]),
+                    el('div', { class: 'buttons' }, [show]),
+                    problem
+                ]);
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    if (!fromInput.value || !toInput.value) { problem.textContent = 'Choose both dates.'; problem.hidden = false; return; }
+                    if (fromInput.value > toInput.value) { problem.textContent = 'Choose a start date that is not after the end date.'; problem.hidden = false; return; }
+                    setFilter({ from: fromInput.value, to: toInput.value });
+                });
+                sync();
+                menu.appendChild(form);
             }
 
             // The position a recruitment applicant applied for, and their résumé.

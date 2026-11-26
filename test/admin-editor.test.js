@@ -89,13 +89,16 @@ test('the editor actions stay reachable', () => {
     for (const label of ['Save draft', 'Preview', 'Publish', 'Archive', 'Restore']) assert.ok(js.includes("text: '" + label) || js.includes("'" + label + "'"), label);
 });
 
-test('the enquiries table has no Email column and filters Form and Applied for from their headings', () => {
+test('the enquiries table has no Email column or filter bar; every heading is a filter', () => {
     assert.doesNotMatch(js, /'Contact', 'Email'/);
     assert.doesNotMatch(js, /data-label': 'Email'/);
-    assert.match(js, /columnFilter\('Form', formField, data\.options\.forms\)/);
-    assert.match(js, /columnFilter\('Applied for', roleField, data\.options\.roles\)/);
-    assert.match(js, /\['role', roleSelect\]/);
+    for (const heading of ['Submitted', 'Form', 'Name or company', 'Contact', 'Applied for', 'Status']) {
+        assert.match(js, new RegExp("headingFilter\\('" + heading + "'"), heading);
+    }
+    assert.doesNotMatch(js, /var filters = el\('form', \{ class: 'filters' \}, filter\.nodes\.concat\(\[formSelect/);
+    assert.match(js, /\['from', 'to', 'form', 'role', 'status', 'name', 'contact', 'email', 'q'\]/);
     assert.match(css, /\.column-filter-menu \{ position: fixed;/);
+    assert.match(css, /\.inbox-table thead \{ display: block;/, 'the heading filters stay reachable on a phone');
 });
 
 test('Delete is offered with the statuses of non-recruitment enquiries only, and asks for confirmation', () => {

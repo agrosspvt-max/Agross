@@ -954,3 +954,36 @@ test('a General Contact, Dealership or Farming enquiry can be deleted for good; 
     assert.equal((await staffRemove(dealerId)).statusCode, 200);
     assert.equal((await db.query('SELECT count(*)::int n FROM enquiries WHERE id = $1', [dealerId])).rows[0].n, 0);
 });
+
+test('the enquiries list searches the name or company and the contact, and counts each status', async t => {
+    if (!available) return t.skip('no test database');
+    await addEnquiry('contact', 'search-a-0123456789', { ...contact(1), name: 'Ravi Kumar', phone: '+91 98765-43210' });
+    await addEnquiry('contact', 'search-b-0123456789', { ...contact(2), name: 'Sita Devi', phone: '9123456789' });
+    await addEnquiry('dealership', 'search-c-0123456789', { ...contact(3), name: 'Mohan', firm: 'Green Agro Traders', mobile: '9000011111' });
+    await addEnquiry('recruitment', 'search-d-0123456789', recruit(4));
+    await createUser();
+    const { cookie, csrf } = await signIn();
+    const list = async query => (await call(admin, { route: 'enquiries', query, cookie })).body;
+    const names = async query => (await list(query)).items.map(item => item.name).sort();
+
+    assert.deepEqual(await names({ name: 'ravi' }), ['Ravi Kumar']);
+    assert.deepEqual(await names({ name: '%' }), [], 'wildcards are searched as text');
+    assert.deepEqual(await names({ name: 'agro TRADERS' }), ['Mohan (Green Agro Traders)'], 'the company is searched too');
+    assert.deepEqual(await names({ contact: '98765 43210' }), ['Ravi Kumar'], 'spaces and dashes are ignored');
+    assert.deepEqual(await names({ contact: '43210' }), ['Ravi Kumar']);
+    assert.deepEqual(await names({ contact: 'p2@EXAMPLE' }), ['Sita Devi'], 'anything else matches the email');
+    assert.equal((await call(admin, { route: 'enquiries', query: { name: 'a\u0001' }, cookie })).statusCode, 400);
+
+    const first = (await list({})).items.find(item => item.name === 'Ravi Kumar');
+    assert.equal((await call(admin, { method: 'POST', route: 'enquiry-status', body: { id: first.id, status: 'resolved' }, cookie, csrf })).statusCode, 200);
+    const counts = Object.fromEntries((await list({})).options.statuses.map(option => [option.value, option.count]));
+    assert.deepEqual(counts, { new: 3, in_progress: 0, resolved: 1, shortlisted: 0 });
+    // A chosen status does not change its own counts, so another can still be picked; other filters do.
+    assert.equal((await list({ status: 'resolved' })).options.statuses.find(option => option.value === 'new').count, 3);
+    assert.equal((await list({ form: 'contact' })).options.statuses.find(option => option.value === 'new').count, 1);
+
+    await createUser({ username: 'staff', permissions: ['enquiries'] });
+    const staff = await signIn('staff');
+    const staffStatuses = (await call(admin, { route: 'enquiries', cookie: staff.cookie })).body.options.statuses.map(option => option.value);
+    assert.deepEqual(staffStatuses, ['new', 'in_progress', 'resolved']);
+});
